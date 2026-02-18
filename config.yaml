@@ -59,9 +59,6 @@ groups:
   - name: Laser Processing Parameters
     always_on: true
     variables:
-      - name: Laser in use
-        type: text
-        default: "TruFiber 500 P compact (FD44-A) 1 PCE 500 W Fiber Laser"
       - name: Laser Power (W)
         type: float
         default: 0
