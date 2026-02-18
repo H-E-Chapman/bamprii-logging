@@ -1,6 +1,6 @@
 groups:
   - name: General
-    always_on: true  # Cannot be toggled off
+    always_on: true
     variables:
       - name: Run ID
         type: text
@@ -13,7 +13,7 @@ groups:
       - name: Experiment type
         type: select
         options: [Setup, Weld, AM, Flat]
-        default: ""
+        default: Setup
         required: true
       - name: Notes
         type: text
@@ -26,6 +26,7 @@ groups:
       - name: Beamline
         type: select
         options: [DLS I12, ESRF ID19, HEPS ID23, APS ID32, Other]
+        default: DLS I12
       - name: Beam Energy (KeV)
         type: float
         default: 0
@@ -39,11 +40,11 @@ groups:
         type: float
         default: 0
       - name: X-ray scan number
-        type: int
+        type: integer
         default: 0
 
   - name: Materials
-    always_on: True
+    always_on: true
     variables:
       - name: Substrate ID
         type: text
@@ -56,11 +57,11 @@ groups:
         default: ""
 
   - name: Laser Processing Parameters
-    always_on: True
+    always_on: true
     variables:
-      - - name: Laser in use
-      - type: text
-      - default: "TruFiber 500 P compact (FD44-A) 1 PCE 500 W Fiber Laser"
+      - name: Laser in use
+        type: text
+        default: "TruFiber 500 P compact (FD44-A) 1 PCE 500 W Fiber Laser"
       - name: Laser Power (W)
         type: float
         default: 0
@@ -82,7 +83,7 @@ groups:
         default: 35.14
 
   - name: Equipment in use
-    always_on: True
+    always_on: true
     variables:
       - name: Laser
         type: text
