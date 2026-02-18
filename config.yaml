@@ -10,78 +10,86 @@ groups:
         type: text
         default: ""
         required: true
+      - name: Experiment type
+        type: select
+        options: [Setup, Weld, AM, Flat]
+        default: ""
+        required: true
       - name: Notes
         type: text
         default: ""
         required: false
 
-  - name: Reactor
+  - name: X-ray beam settings
     always_on: false
     variables:
-      - name: Temperature (°C)
-        type: float
-        default: 25.0
-      - name: Pressure (bar)
-        type: float
-        default: 1.0
-      - name: Stir Speed (rpm)
-        type: integer
-        default: 200
-      - name: Reaction Time (min)
-        type: float
-        default: 60.0
-
-  - name: Pump A
-    always_on: false
-    variables:
-      - name: Flow Rate (mL/min)
-        type: float
-        default: 1.0
-      - name: Solvent
+      - name: Beamline
         type: select
-        options: [Water, Ethanol, Methanol, Acetonitrile, Other]
-        default: Water
-      - name: Concentration (mM)
+        options: [DLS I12, ESRF ID19, HEPS ID23, APS ID32, Other]
+      - name: Beam Energy (KeV)
         type: float
-        default: 10.0
+        default: 0
+      - name: Exposure time (us)
+        type: float
+        default: 0
+      - name: Framerate (kfps)
+        type: float
+        default: 0
+      - name: Pixel Size (um)
+        type: float
+        default: 0
+      - name: X-ray scan number
+        type: int
+        default: 0
 
-  - name: Pump B
+  - name: Materials
+    always_on: True
+    variables:
+      - name: Substrate ID
+        type: text
+        default: ""
+      - name: Substrate material
+        type: text
+        default: ""
+      - name: Powder material
+        type: text
+        default: ""
+
+  - name: Laser Processing Parameters
+    always_on: True
+    variables:
+      - - name: Laser in use
+      - type: text
+      - default: "TruFiber 500 P compact (FD44-A) 1 PCE 500 W Fiber Laser"
+      - name: Laser Power (W)
+        type: float
+        default: 0
+      - name: Scan Speed (mm/s)
+        type: float
+        default: 0
+      - name: Laser Spot Size (mm)
+        type: float
+        default: 0
+
+  - name: Ultrasonic Processing Parameters
     always_on: false
     variables:
-      - name: Flow Rate (mL/min)
+      - name: Amplitude (%)
         type: float
-        default: 1.0
-      - name: Solvent
-        type: select
-        options: [Water, Ethanol, Methanol, Acetonitrile, Other]
-        default: Water
-      - name: Concentration (mM)
+        default: 0
+      - name: Frequency (kHz)
         type: float
-        default: 10.0
+        default: 35.14
 
-  - name: Detector
-    always_on: false
+  - name: Equipment in use
+    always_on: True
     variables:
-      - name: Wavelength (nm)
-        type: integer
-        default: 254
-      - name: Gain
-        type: select
-        options: ["1x", "2x", "5x", "10x"]
-        default: "1x"
-      - name: Baseline (mV)
-        type: float
-        default: 0.0
-
-  - name: Outputs
-    always_on: false
-    variables:
-      - name: Yield (%)
-        type: float
-        default: 0.0
-      - name: Purity (%)
-        type: float
-        default: 0.0
-      - name: Product Mass (mg)
-        type: float
-        default: 0.0
+      - name: Laser
+        type: text
+        default: "TruFiber 500 P compact (FD44-A)"
+      - name: Powder feeder
+        type: text
+        default: "GTV PF 2/2 LC"
+      - name: Sample manipulation
+        type: text
+        default: "Meca500 6-axis Robotic arm"
