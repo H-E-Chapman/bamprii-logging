@@ -1,0 +1,87 @@
+groups:
+  - name: General
+    always_on: true  # Cannot be toggled off
+    variables:
+      - name: Run ID
+        type: text
+        default: ""
+        required: true
+      - name: Operator
+        type: text
+        default: ""
+        required: true
+      - name: Notes
+        type: text
+        default: ""
+        required: false
+
+  - name: Reactor
+    always_on: false
+    variables:
+      - name: Temperature (°C)
+        type: float
+        default: 25.0
+      - name: Pressure (bar)
+        type: float
+        default: 1.0
+      - name: Stir Speed (rpm)
+        type: integer
+        default: 200
+      - name: Reaction Time (min)
+        type: float
+        default: 60.0
+
+  - name: Pump A
+    always_on: false
+    variables:
+      - name: Flow Rate (mL/min)
+        type: float
+        default: 1.0
+      - name: Solvent
+        type: select
+        options: [Water, Ethanol, Methanol, Acetonitrile, Other]
+        default: Water
+      - name: Concentration (mM)
+        type: float
+        default: 10.0
+
+  - name: Pump B
+    always_on: false
+    variables:
+      - name: Flow Rate (mL/min)
+        type: float
+        default: 1.0
+      - name: Solvent
+        type: select
+        options: [Water, Ethanol, Methanol, Acetonitrile, Other]
+        default: Water
+      - name: Concentration (mM)
+        type: float
+        default: 10.0
+
+  - name: Detector
+    always_on: false
+    variables:
+      - name: Wavelength (nm)
+        type: integer
+        default: 254
+      - name: Gain
+        type: select
+        options: ["1x", "2x", "5x", "10x"]
+        default: "1x"
+      - name: Baseline (mV)
+        type: float
+        default: 0.0
+
+  - name: Outputs
+    always_on: false
+    variables:
+      - name: Yield (%)
+        type: float
+        default: 0.0
+      - name: Purity (%)
+        type: float
+        default: 0.0
+      - name: Product Mass (mg)
+        type: float
+        default: 0.0
