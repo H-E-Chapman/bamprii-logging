@@ -15,7 +15,7 @@ _HERE = pathlib.Path(__file__).parent
 CONFIG_FILE = _HERE / "config.yaml"
 
 st.set_page_config(
-    page_title="bamprii log",
+    page_title="BAMPR-II log",
     page_icon=str(_HERE / "MXI.png"),
     layout="wide",
     initial_sidebar_state="expanded",
@@ -131,11 +131,16 @@ for group in groups:
         key = f"val_{group['name']}_{var['name']}"
         if key not in st.session_state:
             if var.get("type") == "auto_increment":
-                col_name = f"{group['name']} — {var['name']}"
-                last = get_last_counter(col_name, var)
-                next_n = last + 1
-                st.session_state[key] = format_counter(next_n, var)
-                st.session_state[f"_counter_{key}"] = next_n
+                counter_key = f"_counter_{key}"
+                if counter_key not in st.session_state:
+                    col_name = f"{group['name']} — {var['name']}"
+                    last = get_last_counter(col_name, var)
+                    next_n = last + 1
+                    st.session_state[key] = format_counter(next_n, var)
+                    st.session_state[counter_key] = next_n
+                else:
+                    n = st.session_state[counter_key]
+                    st.session_state[key] = format_counter(n, var)
             else:
                 st.session_state[key] = var.get("default", "")
 
@@ -145,7 +150,7 @@ if "log_message" not in st.session_state:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.title("bamprii log")
+    st.title("Blown-powder Additive Manufacturing Process Replicator, version II (BAMPR-II)")
     st.markdown("---")
     st.subheader("Active Equipment")
     st.caption("Toggle which variable sets are relevant for this session.")
@@ -184,6 +189,11 @@ with st.sidebar:
                 file_name=f"experiment_log_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
             )
+
+# ── Data cache ────────────────────────────────────────────────────────────────
+
+if "df_cache" not in st.session_state:
+    st.session_state.df_cache = None
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
@@ -367,12 +377,24 @@ with tab_log:
 with tab_plot:
     st.title("Plot")
 
-    with st.spinner("Loading data from Google Sheets..."):
-        df = load_log()
+    col_refresh, col_info = st.columns([1, 4])
+    with col_refresh:
+        if st.button("🔄 Load / Refresh Data", type="primary", use_container_width=True):
+            with st.spinner("Pulling from Google Sheets..."):
+                st.session_state.df_cache = load_log()
+
+    if st.session_state.df_cache is None:
+        st.info("Press **Load / Refresh Data** to fetch runs from the sheet.")
+        st.stop()
+
+    df = st.session_state.df_cache
 
     if df.empty:
         st.info("No data logged yet — come back once you have some runs.")
         st.stop()
+
+    with col_info:
+        st.caption(f"Loaded **{len(df)}** runs. Press refresh to pull latest data from the sheet.")
 
     # Force numeric conversion on anything that looks numeric
     for col in df.columns:
