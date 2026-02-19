@@ -6,6 +6,8 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pathlib
 import re
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -67,24 +69,14 @@ def append_log(row: dict):
 # ── Auto-increment helpers ────────────────────────────────────────────────────
 
 def format_counter(n: int, var: dict) -> str:
-    """
-    Format an integer counter according to the variable's format spec.
-
-    format options in config:
-      padded      →  0001  0042  0600        (pad to `pad` digits, default 4)
-      prefixed    →  ID001  RUN042           (prefix string + padded number)
-    """
     fmt = var.get("format", "padded")
     pad = int(var.get("pad", 4))
     prefix = var.get("prefix", "")
-
     if fmt == "prefixed":
         return f"{prefix}{str(n).zfill(pad)}"
-    else:  # padded (default)
-        return str(n).zfill(pad)
+    return str(n).zfill(pad)
 
 def extract_counter(value: str, var: dict) -> int | None:
-    """Pull the numeric part out of a formatted counter string."""
     fmt = var.get("format", "padded")
     prefix = var.get("prefix", "")
     try:
@@ -97,10 +89,6 @@ def extract_counter(value: str, var: dict) -> int | None:
         return None
 
 def get_last_counter(col_name: str, var: dict) -> int:
-    """
-    Read the Google Sheet and find the highest counter value in col_name.
-    Falls back to (start - 1) if no values exist yet.
-    """
     start = int(var.get("start", 1))
     try:
         ws = get_worksheet()
@@ -138,7 +126,6 @@ for group in groups:
     if key not in st.session_state:
         st.session_state[key] = True
 
-# For auto_increment fields, seed from the sheet on first load
 for group in groups:
     for var in group["variables"]:
         key = f"val_{group['name']}_{var['name']}"
@@ -198,178 +185,342 @@ with st.sidebar:
                 mime="text/csv",
             )
 
-# ── Main form ─────────────────────────────────────────────────────────────────
+# ── Tabs ──────────────────────────────────────────────────────────────────────
 
-st.title("Run Entry")
+tab_log, tab_plot = st.tabs(["📋 Run Entry", "📈 Plot"])
 
-if st.session_state.log_message:
-    msg_type, msg_text = st.session_state.log_message
-    if msg_type == "success":
-        st.success(msg_text)
-    elif msg_type == "error":
-        st.error(msg_text)
-    st.session_state.log_message = None
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1 — Run Entry
+# ══════════════════════════════════════════════════════════════════════════════
 
-active_groups = [
-    g for g in groups
-    if g.get("always_on") or st.session_state.get(f"active_{g['name']}")
-]
+with tab_log:
+    st.title("Run Entry")
 
-if not active_groups:
-    st.warning("No equipment groups are active. Enable some in the sidebar.")
-    st.stop()
+    if st.session_state.log_message:
+        msg_type, msg_text = st.session_state.log_message
+        if msg_type == "success":
+            st.success(msg_text)
+        elif msg_type == "error":
+            st.error(msg_text)
+        st.session_state.log_message = None
 
-for i in range(0, len(active_groups), 2):
-    cols = st.columns(2)
-    for j, group in enumerate(active_groups[i : i + 2]):
-        with cols[j]:
-            with st.container(border=True):
-                st.subheader(group["name"])
-                for var in group["variables"]:
-                    val_key = f"val_{group['name']}_{var['name']}"
-                    vtype = var.get("type", "text")
-                    label = var["name"]
-                    required = var.get("required", False)
-                    display_label = f"{label} *" if required else label
+    active_groups = [
+        g for g in groups
+        if g.get("always_on") or st.session_state.get(f"active_{g['name']}")
+    ]
 
-                    if vtype == "auto_increment":
-                        # Show as read-only display + manual override option
-                        current_val = st.session_state[val_key]
-                        c1, c2 = st.columns([3, 1])
-                        with c1:
-                            override = st.text_input(
-                                display_label,
-                                value=current_val,
-                                key=f"input_{val_key}",
-                                help="Auto-increments on log. Edit manually to override.",
-                            )
-                            st.session_state[val_key] = override
-                        with c2:
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            if st.button("🔁", key=f"resync_{val_key}", help="Re-sync from sheet"):
-                                col_name = f"{group['name']} — {var['name']}"
-                                last = get_last_counter(col_name, var)
-                                next_n = last + 1
-                                st.session_state[val_key] = format_counter(next_n, var)
-                                st.session_state[f"_counter_{val_key}"] = next_n
-                                st.rerun()
-
-                    elif vtype == "float":
-                        st.session_state[val_key] = st.number_input(
-                            display_label,
-                            value=float(st.session_state[val_key]),
-                            key=f"input_{val_key}",
-                            format="%.3f",
-                        )
-                    elif vtype == "integer":
-                        st.session_state[val_key] = st.number_input(
-                            display_label,
-                            value=int(st.session_state[val_key]),
-                            key=f"input_{val_key}",
-                            step=1,
-                        )
-                    elif vtype == "select":
-                        options = var.get("options", [])
-                        current = st.session_state[val_key]
-                        idx = options.index(current) if current in options else 0
-                        st.session_state[val_key] = st.selectbox(
-                            display_label,
-                            options=options,
-                            index=idx,
-                            key=f"input_{val_key}",
-                        )
-                    else:
-                        st.session_state[val_key] = st.text_input(
-                            display_label,
-                            value=str(st.session_state[val_key]),
-                            key=f"input_{val_key}",
-                        )
-
-# ── Log / Reset buttons ───────────────────────────────────────────────────────
-
-st.markdown("---")
-col1, col2, col3 = st.columns([1, 1, 3])
-
-with col1:
-    log_pressed = st.button("📋 Log Run", type="primary", use_container_width=True)
-
-with col2:
-    if st.button("🔄 Reset Fields", use_container_width=True):
-        for group in groups:
-            for var in group["variables"]:
-                key = f"val_{group['name']}_{var['name']}"
-                if var.get("type") == "auto_increment":
-                    col_name = f"{group['name']} — {var['name']}"
-                    last = get_last_counter(col_name, var)
-                    next_n = last + 1
-                    st.session_state[key] = format_counter(next_n, var)
-                    st.session_state[f"_counter_{key}"] = next_n
-                else:
-                    st.session_state[key] = var.get("default", "")
-        st.rerun()
-
-if log_pressed:
-    # Validate required fields
-    missing = []
-    for group in active_groups:
-        for var in group["variables"]:
-            if var.get("required"):
-                val = st.session_state[f"val_{group['name']}_{var['name']}"]
-                if not str(val).strip():
-                    missing.append(var["name"])
-
-    if missing:
-        st.session_state.log_message = (
-            "error",
-            f"Please fill in required fields: {', '.join(missing)}",
-        )
-        st.rerun()
+    if not active_groups:
+        st.warning("No equipment groups are active. Enable some in the sidebar.")
     else:
-        row = {"Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-        for group in active_groups:
-            for var in group["variables"]:
-                col_name = f"{group['name']} — {var['name']}"
-                row[col_name] = st.session_state[f"val_{group['name']}_{var['name']}"]
+        for i in range(0, len(active_groups), 2):
+            cols = st.columns(2)
+            for j, group in enumerate(active_groups[i : i + 2]):
+                with cols[j]:
+                    with st.container(border=True):
+                        st.subheader(group["name"])
+                        for var in group["variables"]:
+                            val_key = f"val_{group['name']}_{var['name']}"
+                            vtype = var.get("type", "text")
+                            label = var["name"]
+                            required = var.get("required", False)
+                            display_label = f"{label} *" if required else label
 
-        try:
-            with st.spinner("Saving to Google Sheets..."):
-                append_log(row)
+                            if vtype == "auto_increment":
+                                current_val = st.session_state[val_key]
+                                c1, c2 = st.columns([3, 1])
+                                with c1:
+                                    override = st.text_input(
+                                        display_label,
+                                        value=current_val,
+                                        key=f"input_{val_key}",
+                                        help="Auto-increments on log. Edit manually to override.",
+                                    )
+                                    st.session_state[val_key] = override
+                                with c2:
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    if st.button("🔁", key=f"resync_{val_key}", help="Re-sync from sheet"):
+                                        col_name = f"{group['name']} — {var['name']}"
+                                        last = get_last_counter(col_name, var)
+                                        next_n = last + 1
+                                        st.session_state[val_key] = format_counter(next_n, var)
+                                        st.session_state[f"_counter_{val_key}"] = next_n
+                                        st.rerun()
+                            elif vtype == "float":
+                                st.session_state[val_key] = st.number_input(
+                                    display_label,
+                                    value=float(st.session_state[val_key]),
+                                    key=f"input_{val_key}",
+                                    format="%.3f",
+                                )
+                            elif vtype == "integer":
+                                st.session_state[val_key] = st.number_input(
+                                    display_label,
+                                    value=int(st.session_state[val_key]),
+                                    key=f"input_{val_key}",
+                                    step=1,
+                                )
+                            elif vtype == "select":
+                                options = var.get("options", [])
+                                current = st.session_state[val_key]
+                                idx = options.index(current) if current in options else 0
+                                st.session_state[val_key] = st.selectbox(
+                                    display_label,
+                                    options=options,
+                                    index=idx,
+                                    key=f"input_{val_key}",
+                                )
+                            else:
+                                st.session_state[val_key] = st.text_input(
+                                    display_label,
+                                    value=str(st.session_state[val_key]),
+                                    key=f"input_{val_key}",
+                                )
 
-            # Advance all auto_increment counters after a successful log
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 1, 3])
+
+        with col1:
+            log_pressed = st.button("📋 Log Run", type="primary", use_container_width=True)
+
+        with col2:
+            if st.button("🔄 Reset Fields", use_container_width=True):
+                for group in groups:
+                    for var in group["variables"]:
+                        key = f"val_{group['name']}_{var['name']}"
+                        if var.get("type") == "auto_increment":
+                            col_name = f"{group['name']} — {var['name']}"
+                            last = get_last_counter(col_name, var)
+                            next_n = last + 1
+                            st.session_state[key] = format_counter(next_n, var)
+                            st.session_state[f"_counter_{key}"] = next_n
+                        else:
+                            st.session_state[key] = var.get("default", "")
+                st.rerun()
+
+        if log_pressed:
+            missing = []
             for group in active_groups:
                 for var in group["variables"]:
-                    if var.get("type") == "auto_increment":
-                        key = f"val_{group['name']}_{var['name']}"
-                        counter_key = f"_counter_{key}"
-                        current_n = st.session_state.get(counter_key, int(var.get("start", 1)))
-                        next_n = current_n + 1
-                        st.session_state[key] = format_counter(next_n, var)
-                        st.session_state[counter_key] = next_n
+                    if var.get("required"):
+                        val = st.session_state[f"val_{group['name']}_{var['name']}"]
+                        if not str(val).strip():
+                            missing.append(var["name"])
 
-            run_id = row.get("General — Run ID", "—")
-            st.session_state.log_message = (
-                "success",
-                f"✅ Run '{run_id}' logged at {row['Timestamp']}",
+            if missing:
+                st.session_state.log_message = (
+                    "error",
+                    f"Please fill in required fields: {', '.join(missing)}",
+                )
+                st.rerun()
+            else:
+                row = {"Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                for group in active_groups:
+                    for var in group["variables"]:
+                        col_name = f"{group['name']} — {var['name']}"
+                        row[col_name] = st.session_state[f"val_{group['name']}_{var['name']}"]
+
+                try:
+                    with st.spinner("Saving to Google Sheets..."):
+                        append_log(row)
+
+                    for group in active_groups:
+                        for var in group["variables"]:
+                            if var.get("type") == "auto_increment":
+                                key = f"val_{group['name']}_{var['name']}"
+                                counter_key = f"_counter_{key}"
+                                current_n = st.session_state.get(counter_key, int(var.get("start", 1)))
+                                next_n = current_n + 1
+                                st.session_state[key] = format_counter(next_n, var)
+                                st.session_state[counter_key] = next_n
+
+                    run_id = row.get("General — Run ID", "—")
+                    st.session_state.log_message = (
+                        "success",
+                        f"✅ Run '{run_id}' logged at {row['Timestamp']}",
+                    )
+                except Exception as e:
+                    st.session_state.log_message = (
+                        "error",
+                        f"❌ Failed to write to Google Sheets: {e}",
+                    )
+                st.rerun()
+
+    st.markdown("---")
+    with st.expander("📊 View Recent Runs", expanded=False):
+        with st.spinner("Loading..."):
+            df_log = load_log()
+        if df_log.empty:
+            st.info("Nothing logged yet.")
+        else:
+            st.dataframe(
+                df_log.tail(20).iloc[::-1],
+                use_container_width=True,
+                hide_index=True,
             )
-        except Exception as e:
-            st.session_state.log_message = (
-                "error",
-                f"❌ Failed to write to Google Sheets: {e}",
-            )
-        st.rerun()
+            st.caption(f"Showing last 20 of {len(df_log)} total runs.")
 
-# ── Recent runs viewer ────────────────────────────────────────────────────────
 
-st.markdown("---")
-with st.expander("📊 View Recent Runs", expanded=False):
-    with st.spinner("Loading..."):
-        df_log = load_log()
-    if df_log.empty:
-        st.info("Nothing logged yet.")
-    else:
-        st.dataframe(
-            df_log.tail(20).iloc[::-1],
-            use_container_width=True,
-            hide_index=True,
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — Plot
+# ══════════════════════════════════════════════════════════════════════════════
+
+with tab_plot:
+    st.title("Plot")
+
+    with st.spinner("Loading data from Google Sheets..."):
+        df = load_log()
+
+    if df.empty:
+        st.info("No data logged yet — come back once you have some runs.")
+        st.stop()
+
+    # Force numeric conversion on anything that looks numeric
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="ignore")
+
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
+    all_cols = df.columns.tolist()
+
+    if len(numeric_cols) < 2:
+        st.warning("Need at least 2 numeric columns to plot. Log more runs with numeric fields.")
+        st.stop()
+
+    # ── Filter panel ──────────────────────────────────────────────────────────
+
+    with st.expander("🔍 Filter Data", expanded=True):
+        st.caption("Filter runs before plotting. Only categories with multiple values are shown.")
+        df_filtered = df.copy()
+        filter_cols = st.columns(3)
+        filterable = [c for c in categorical_cols if 1 < df[c].nunique() <= 30]
+
+        for i, col in enumerate(filterable):
+            with filter_cols[i % 3]:
+                unique_vals = sorted(df[col].dropna().unique().tolist(), key=str)
+                selected = st.multiselect(
+                    col,
+                    options=unique_vals,
+                    default=unique_vals,
+                    key=f"filter_{col}",
+                )
+                if selected:
+                    df_filtered = df_filtered[df_filtered[col].isin(selected)]
+
+        # Date/timestamp range filter if Timestamp column exists
+        if "Timestamp" in df.columns:
+            df_filtered["Timestamp"] = pd.to_datetime(df_filtered["Timestamp"], errors="coerce")
+            valid_dates = df_filtered["Timestamp"].dropna()
+            if not valid_dates.empty:
+                min_date = valid_dates.min().date()
+                max_date = valid_dates.max().date()
+                if min_date < max_date:
+                    with filter_cols[len(filterable) % 3]:
+                        date_range = st.date_input(
+                            "Date range",
+                            value=(min_date, max_date),
+                            min_value=min_date,
+                            max_value=max_date,
+                            key="filter_date",
+                        )
+                        if len(date_range) == 2:
+                            df_filtered = df_filtered[
+                                (df_filtered["Timestamp"].dt.date >= date_range[0]) &
+                                (df_filtered["Timestamp"].dt.date <= date_range[1])
+                            ]
+
+        st.caption(f"Showing **{len(df_filtered)}** of {len(df)} runs after filtering.")
+
+    if df_filtered.empty:
+        st.warning("No runs match the current filters.")
+        st.stop()
+
+    # ── Axis selectors ────────────────────────────────────────────────────────
+
+    st.markdown("---")
+    st.subheader("Axis Configuration")
+    sel_cols = st.columns(4)
+
+    with sel_cols[0]:
+        x_col = st.selectbox("X axis", options=numeric_cols, key="plot_x")
+    with sel_cols[1]:
+        y_col = st.selectbox(
+            "Y axis",
+            options=[c for c in numeric_cols if c != x_col],
+            key="plot_y",
         )
-        st.caption(f"Showing last 20 of {len(df_log)} total runs.")
+    with sel_cols[2]:
+        size_options = ["(none)"] + [c for c in numeric_cols if c not in (x_col, y_col)]
+        size_col = st.selectbox("Point size", options=size_options, key="plot_size")
+    with sel_cols[3]:
+        colour_options = ["(none)"] + [c for c in all_cols if c not in (x_col, y_col)]
+        colour_col = st.selectbox("Colour by", options=colour_options, key="plot_colour")
+
+    # ── Optional: label points ────────────────────────────────────────────────
+
+    label_options = ["(none)"] + all_cols
+    label_col = st.selectbox(
+        "Label points with",
+        options=label_options,
+        index=0,
+        key="plot_label",
+        help="Show a column value next to each point",
+    )
+
+    # ── Build plot ────────────────────────────────────────────────────────────
+
+    st.markdown("---")
+
+    plot_df = df_filtered.copy()
+
+    # Normalise size column to a reasonable pixel range
+    size_vals = None
+    if size_col != "(none)" and size_col in plot_df.columns:
+        raw = pd.to_numeric(plot_df[size_col], errors="coerce").fillna(0)
+        min_r, max_r = raw.min(), raw.max()
+        if max_r > min_r:
+            size_vals = 6 + 24 * (raw - min_r) / (max_r - min_r)
+        else:
+            size_vals = [12] * len(raw)
+        plot_df["_size"] = size_vals
+
+    colour_arg = colour_col if colour_col != "(none)" else None
+    size_arg = "_size" if size_vals is not None else None
+
+    hover_data = {c: True for c in all_cols if c not in (x_col, y_col, "_size")}
+
+    fig = px.scatter(
+        plot_df,
+        x=x_col,
+        y=y_col,
+        size=size_arg,
+        color=colour_arg,
+        hover_data=hover_data,
+        template="plotly_white",
+        size_max=36,
+        labels={x_col: x_col, y_col: y_col},
+    )
+
+    # Add text labels if requested
+    if label_col != "(none)" and label_col in plot_df.columns:
+        fig.update_traces(
+            text=plot_df[label_col].astype(str),
+            textposition="top center",
+            mode="markers+text",
+        )
+
+    fig.update_layout(
+        height=560,
+        margin=dict(l=20, r=20, t=40, b=20),
+        legend=dict(orientation="v", x=1.02, y=1),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Summary stats for plotted columns ─────────────────────────────────────
+
+    with st.expander("📐 Summary statistics", expanded=False):
+        stat_cols = [c for c in [x_col, y_col] + ([size_col] if size_col != "(none)" else []) if c in numeric_cols]
+        st.dataframe(
+            plot_df[stat_cols].describe().round(4),
+            use_container_width=True,
+        )
