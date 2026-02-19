@@ -406,7 +406,7 @@ with tab_plot:
                 if selected:
                     df_filtered = df_filtered[df_filtered[col].isin(selected)]
 
-        # Date/timestamp range filter if Timestamp column exists
+        # Date/timestamp range filter
         if "Timestamp" in df.columns:
             df_filtered["Timestamp"] = pd.to_datetime(df_filtered["Timestamp"], errors="coerce")
             valid_dates = df_filtered["Timestamp"].dropna()
@@ -438,7 +438,7 @@ with tab_plot:
 
     st.markdown("---")
     st.subheader("Axis Configuration")
-    sel_cols = st.columns(4)
+    sel_cols = st.columns(3)
 
     with sel_cols[0]:
         x_col = st.selectbox("X axis", options=numeric_cols, key="plot_x")
@@ -449,78 +449,169 @@ with tab_plot:
             key="plot_y",
         )
     with sel_cols[2]:
-        size_options = ["(none)"] + [c for c in numeric_cols if c not in (x_col, y_col)]
-        size_col = st.selectbox("Point size", options=size_options, key="plot_size")
-    with sel_cols[3]:
         colour_options = ["(none)"] + [c for c in all_cols if c not in (x_col, y_col)]
         colour_col = st.selectbox("Colour by", options=colour_options, key="plot_colour")
 
-    # ── Optional: label points ────────────────────────────────────────────────
-
-    label_options = ["(none)"] + all_cols
-    label_col = st.selectbox(
-        "Label points with",
-        options=label_options,
-        index=0,
-        key="plot_label",
-        help="Show a column value next to each point",
-    )
-
-    # ── Build plot ────────────────────────────────────────────────────────────
+    # ── Binning tolerance ─────────────────────────────────────────────────────
+    # X/Y values are continuous floats so "same point" needs a binning tolerance.
+    # We round each axis to N significant figures before grouping.
 
     st.markdown("---")
+    st.subheader("Point Grouping")
+    bin_cols = st.columns([2, 2, 3])
 
-    plot_df = df_filtered.copy()
-
-    # Normalise size column to a reasonable pixel range
-    size_vals = None
-    if size_col != "(none)" and size_col in plot_df.columns:
-        raw = pd.to_numeric(plot_df[size_col], errors="coerce").fillna(0)
-        min_r, max_r = raw.min(), raw.max()
-        if max_r > min_r:
-            size_vals = 6 + 24 * (raw - min_r) / (max_r - min_r)
-        else:
-            size_vals = [12] * len(raw)
-        plot_df["_size"] = size_vals
-
-    colour_arg = colour_col if colour_col != "(none)" else None
-    size_arg = "_size" if size_vals is not None else None
-
-    hover_data = {c: True for c in all_cols if c not in (x_col, y_col, "_size")}
-
-    fig = px.scatter(
-        plot_df,
-        x=x_col,
-        y=y_col,
-        size=size_arg,
-        color=colour_arg,
-        hover_data=hover_data,
-        template="plotly_white",
-        size_max=36,
-        labels={x_col: x_col, y_col: y_col},
-    )
-
-    # Add text labels if requested
-    if label_col != "(none)" and label_col in plot_df.columns:
-        fig.update_traces(
-            text=plot_df[label_col].astype(str),
-            textposition="top center",
-            mode="markers+text",
+    with bin_cols[0]:
+        x_decimals = st.number_input(
+            f"Round X to N decimal places",
+            min_value=0, max_value=6, value=1, step=1,
+            key="bin_x",
+            help="Points with the same rounded X & Y value are merged into one bubble.",
+        )
+    with bin_cols[1]:
+        y_decimals = st.number_input(
+            f"Round Y to N decimal places",
+            min_value=0, max_value=6, value=1, step=1,
+            key="bin_y",
+        )
+    with bin_cols[2]:
+        size_scale = st.slider(
+            "Max bubble size",
+            min_value=20, max_value=100, value=50, step=5,
+            key="size_scale",
         )
 
+    # ── Aggregate: count runs per (x_bin, y_bin) ─────────────────────────────
+
+    plot_df = df_filtered.copy()
+    plot_df["_x_bin"] = plot_df[x_col].round(int(x_decimals))
+    plot_df["_y_bin"] = plot_df[y_col].round(int(y_decimals))
+
+    # For colour: if categorical take the mode per bin; if numeric take the mean
+    agg_dict = {"_count": (x_col, "count")}
+
+    if colour_col != "(none)" and colour_col in plot_df.columns:
+        if colour_col in numeric_cols:
+            agg_dict["_colour"] = (colour_col, "mean")
+        else:
+            agg_dict["_colour"] = (colour_col, lambda x: x.mode().iloc[0] if len(x) > 0 else "")
+
+    # Collect run IDs for hover tooltip
+    id_col = next((c for c in all_cols if "run" in c.lower() and "id" in c.lower()), None)
+    if id_col:
+        agg_dict["_runs"] = (id_col, lambda x: ", ".join(x.astype(str).tolist()))
+
+    grouped = (
+        plot_df
+        .groupby(["_x_bin", "_y_bin"])
+        .agg(**agg_dict)
+        .reset_index()
+        .rename(columns={"_x_bin": x_col, "_y_bin": y_col})
+    )
+
+    # Normalise count → bubble size in pixel range [8, size_scale]
+    counts = grouped["_count"]
+    if counts.max() > counts.min():
+        grouped["_size"] = 8 + (size_scale - 8) * (counts - counts.min()) / (counts.max() - counts.min())
+    else:
+        grouped["_size"] = size_scale * 0.5
+
+    # ── Build hover template ──────────────────────────────────────────────────
+
+    hover_parts = [
+        f"<b>{x_col}</b>: %{{x}}",
+        f"<b>{y_col}</b>: %{{y}}",
+        "<b>Count</b>: %{customdata[0]}",
+    ]
+    custom_cols = ["_count"]
+    if id_col and "_runs" in grouped.columns:
+        hover_parts.append("<b>Runs</b>: %{customdata[1]}")
+        custom_cols.append("_runs")
+
+    hover_template = "<br>".join(hover_parts) + "<extra></extra>"
+
+    # ── Plot ──────────────────────────────────────────────────────────────────
+
+    colour_arg = "_colour" if colour_col != "(none)" else None
+    colour_label = colour_col if colour_col != "(none)" else None
+
+    fig = go.Figure()
+
+    if colour_arg and colour_arg in grouped.columns:
+        # Split into traces by colour category (or use continuous scale for numeric)
+        if colour_col in numeric_cols:
+            fig = px.scatter(
+                grouped,
+                x=x_col,
+                y=y_col,
+                size="_size",
+                color="_colour",
+                color_continuous_scale="Viridis",
+                size_max=size_scale,
+                template="plotly_white",
+                labels={"_colour": colour_col, "_size": "Count"},
+                custom_data=custom_cols,
+            )
+            fig.update_traces(hovertemplate=hover_template)
+            fig.update_coloraxes(colorbar_title=colour_col)
+        else:
+            for cat_val, grp in grouped.groupby("_colour"):
+                fig.add_trace(go.Scatter(
+                    x=grp[x_col],
+                    y=grp[y_col],
+                    mode="markers",
+                    name=str(cat_val),
+                    marker=dict(
+                        size=grp["_size"],
+                        sizemode="diameter",
+                        opacity=0.75,
+                        line=dict(width=1, color="white"),
+                    ),
+                    customdata=grp[custom_cols].values,
+                    hovertemplate=hover_template,
+                ))
+            fig.update_layout(template="plotly_white")
+    else:
+        fig.add_trace(go.Scatter(
+            x=grouped[x_col],
+            y=grouped[y_col],
+            mode="markers",
+            marker=dict(
+                size=grouped["_size"],
+                sizemode="diameter",
+                color="#1f77b4",
+                opacity=0.75,
+                line=dict(width=1, color="white"),
+            ),
+            customdata=grouped[custom_cols].values,
+            hovertemplate=hover_template,
+        ))
+        fig.update_layout(template="plotly_white")
+
     fig.update_layout(
-        height=560,
+        xaxis_title=x_col,
+        yaxis_title=y_col,
+        height=580,
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="v", x=1.02, y=1),
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── Summary stats for plotted columns ─────────────────────────────────────
+    # ── Legend note ───────────────────────────────────────────────────────────
+
+    min_c, max_c = int(counts.min()), int(counts.max())
+    unique_bins = len(grouped)
+    st.caption(
+        f"**{unique_bins}** unique position{'s' if unique_bins != 1 else ''} shown. "
+        f"Bubble size = number of runs at that position (min {min_c}, max {max_c}). "
+        f"Hover over a bubble to see the count and contributing run IDs."
+    )
+
+    # ── Summary stats ─────────────────────────────────────────────────────────
 
     with st.expander("📐 Summary statistics", expanded=False):
-        stat_cols = [c for c in [x_col, y_col] + ([size_col] if size_col != "(none)" else []) if c in numeric_cols]
+        stat_cols = [c for c in [x_col, y_col] if c in numeric_cols]
         st.dataframe(
-            plot_df[stat_cols].describe().round(4),
+            df_filtered[stat_cols].describe().round(4),
             use_container_width=True,
         )
