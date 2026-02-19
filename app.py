@@ -15,8 +15,8 @@ _HERE = pathlib.Path(__file__).parent
 CONFIG_FILE = _HERE / "config.yaml"
 
 st.set_page_config(
-    page_title="Experiment Logger",
-    page_icon="🧪",
+    page_title="bamprii log",
+    page_icon=str(_HERE / "MXI.png"),
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -145,7 +145,7 @@ if "log_message" not in st.session_state:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.title("🧪 Experiment Logger")
+    st.title("bamprii log")
     st.markdown("---")
     st.subheader("Active Equipment")
     st.caption("Toggle which variable sets are relevant for this session.")
@@ -388,11 +388,26 @@ with tab_plot:
 
     # ── Filter panel ──────────────────────────────────────────────────────────
 
+    # Build the set of columns from groups marked filterable: true in config
+    filterable_col_names = set()
+    for group in groups:
+        if group.get("filterable"):
+            for var in group["variables"]:
+                filterable_col_names.add(f"{group['name']} — {var['name']}")
+
+    # If no groups are marked filterable, fall back to all categoricals
+    if filterable_col_names:
+        filterable = [
+            c for c in filterable_col_names
+            if c in df.columns and 1 < df[c].nunique() <= 30
+        ]
+    else:
+        filterable = [c for c in categorical_cols if 1 < df[c].nunique() <= 30]
+
     with st.expander("🔍 Filter Data", expanded=True):
-        st.caption("Filter runs before plotting. Only categories with multiple values are shown.")
+        st.caption("Filter runs before plotting.")
         df_filtered = df.copy()
         filter_cols = st.columns(3)
-        filterable = [c for c in categorical_cols if 1 < df[c].nunique() <= 30]
 
         for i, col in enumerate(filterable):
             with filter_cols[i % 3]:
@@ -426,14 +441,9 @@ with tab_plot:
                             df_filtered = df_filtered[
                                 (df_filtered["Timestamp"].dt.date >= date_range[0]) &
                                 (df_filtered["Timestamp"].dt.date <= date_range[1])
-                            ]
+                                ]
 
         st.caption(f"Showing **{len(df_filtered)}** of {len(df)} runs after filtering.")
-
-    if df_filtered.empty:
-        st.warning("No runs match the current filters.")
-        st.stop()
-
     # ── Axis selectors ────────────────────────────────────────────────────────
 
     st.markdown("---")
@@ -599,6 +609,7 @@ with tab_plot:
 
     # ── Legend note ───────────────────────────────────────────────────────────
 
+    counts = grouped["_count"].fillna(0)
     min_c, max_c = int(counts.min()), int(counts.max())
     unique_bins = len(grouped)
     st.caption(

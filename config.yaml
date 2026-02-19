@@ -50,6 +50,7 @@ groups:
 
   - name: Materials
     always_on: true
+    filterable: true
     variables:
       - name: Substrate ID
         type: text
@@ -63,6 +64,7 @@ groups:
 
   - name: Laser Processing Parameters
     always_on: true
+    filterable: true
     variables:
       - name: Laser Power (W)
         type: float
@@ -76,6 +78,7 @@ groups:
 
   - name: Ultrasonic Processing Parameters
     always_on: false
+    filterable: true
     variables:
       - name: Amplitude (%)
         type: float
