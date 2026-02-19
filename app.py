@@ -477,16 +477,23 @@ with tab_plot:
     st.subheader("Axis Configuration")
     sel_cols = st.columns(3)
 
+    # Only allow plotting columns from filterable groups
+    plottable_cols = [
+        c for c in filterable_col_names
+        if c in df.columns and c in numeric_cols
+    ] if filterable_col_names else numeric_cols
+
     with sel_cols[0]:
-        x_col = st.selectbox("X axis", options=numeric_cols, key="plot_x")
+        x_col = st.selectbox("X axis", options=plottable_cols, key="plot_x")
     with sel_cols[1]:
         y_col = st.selectbox(
             "Y axis",
-            options=[c for c in numeric_cols if c != x_col],
+            options=[c for c in plottable_cols if c != x_col],
             key="plot_y",
         )
     with sel_cols[2]:
-        colour_options = ["(none)"] + [c for c in all_cols if c not in (x_col, y_col)]
+        colour_options = ["(none)"] + [c for c in filterable_col_names if
+                                       c in df.columns and c not in (x_col, y_col)]
         colour_col = st.selectbox("Colour by", options=colour_options, key="plot_colour")
 
     # ── Binning tolerance ─────────────────────────────────────────────────────
@@ -648,8 +655,9 @@ with tab_plot:
     # ── Summary stats ─────────────────────────────────────────────────────────
 
     with st.expander("📐 Summary statistics", expanded=False):
-        stat_cols = [c for c in [x_col, y_col] if c in numeric_cols]
-        st.dataframe(
-            df_filtered[stat_cols].describe().round(4),
-            use_container_width=True,
-        )
+        with st.expander("📐 Summary statistics", expanded=False):
+            stat_cols = [c for c in [x_col, y_col] if c in plottable_cols]
+            st.dataframe(
+                df_filtered[stat_cols].describe().round(4),
+                use_container_width=True,
+            )
