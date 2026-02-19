@@ -398,7 +398,10 @@ with tab_plot:
 
     # Force numeric conversion on anything that looks numeric
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        converted = pd.to_numeric(df[col], errors="coerce")
+        # Only replace if majority of non-null values are numeric
+        if converted.notna().sum() > 0:
+            df[col] = converted
 
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
@@ -541,7 +544,7 @@ with tab_plot:
     )
 
     # Normalise count → bubble size in pixel range [8, size_scale]
-    counts = grouped["_count"]
+    counts = grouped["_count"].fillna(0)
     if counts.max() > counts.min():
         grouped["_size"] = 8 + (size_scale - 8) * (counts - counts.min()) / (counts.max() - counts.min())
     else:
