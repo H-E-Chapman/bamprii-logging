@@ -1,84 +1,93 @@
-# 🧪 Experiment Logger
+# BAMPR-II Experiment Logger
 
-A Streamlit app for logging experimental runs across multiple people and machines.
-
-## Features
-
-- **Persistent fields** — values stay between log presses; only change what's different
-- **Toggleable equipment groups** — enable/disable variable sets per session via the sidebar
-- **Config-driven** — add/rename variables or groups by editing `config.yaml`, no code changes needed
-- **CSV output** — all runs append to a single `experiment_log.csv`, downloadable from the sidebar
-- **Run viewer** — see the last 20 runs inline
+A Streamlit app for logging experimental runs on the Blown-powder Additive Manufacturing Process Replicator, version II. Built for multi-user, multi-machine use across beamtime sessions.
 
 ---
 
 ## Running Locally
-
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 ---
 
-## Deploying to Streamlit Community Cloud (Free, Shared URL)
+## Deployment
 
-1. Push this repo to GitHub (make sure `experiment_log.csv` is in `.gitignore`)
-2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub
-3. Click **New app**, select your repo and `app.py`
-4. Click **Deploy** — you'll get a public URL to share with your team
+Hosted on Streamlit Community Cloud. To redeploy:
 
-> **Note on shared data:** Streamlit Community Cloud gives each app a persistent filesystem, but it resets on redeployment. For a shared log across multiple users/machines, see the Google Sheets backend option below.
+1. Push changes to the `main` branch of `h-e-chapman/bamprii-logging`
+2. The app redeploys automatically at the shared URL
+
+Google Sheets credentials are stored in Streamlit Cloud's secrets vault — never commit `.streamlit/secrets.toml` to the repo.
+
+---
+
+## Features
+
+- **Persistent fields** — values stay between log presses; only change what's different from the last run
+- **Toggleable equipment groups** — enable/disable variable sets per session via the sidebar
+- **Auto-incrementing fields** — Run ID and scan numbers increment automatically on each log press, with manual override and re-sync from sheet
+- **Google Sheets backend** — every log press appends a row to the shared sheet in real time; all users write to the same log
+- **Plot tab** — bubble chart with configurable X/Y axes, colour, point grouping tolerance, and filter panel; data loaded on demand via a refresh button
 
 ---
 
 ## Configuring Variables (`config.yaml`)
 
-Each group has a name, an `always_on` flag, and a list of variables:
+Groups and variables are defined in `config.yaml`. No code changes are needed to add, rename, or reorder fields.
 
+**Group flags:**
+
+| Flag | Description |
+|---|---|
+| `always_on` | Group cannot be toggled off in the sidebar |
+| `filterable` | Group's variables appear as filter and axis options in the Plot tab |
+
+**Variable types:**
+
+| Type | Description |
+|---|---|
+| `float` | Decimal number |
+| `integer` | Whole number |
+| `text` | Free text input |
+| `select` | Dropdown — requires an `options` list and a `default` |
+| `auto_increment` | Automatically increments on each log press — see below |
+
+**Auto-increment options:**
 ```yaml
-groups:
-  - name: My Group
-    always_on: false
-    variables:
-      - name: My Variable
-        type: float        # float | integer | text | select
-        default: 0.0
-      - name: Category
-        type: select
-        options: [Option A, Option B, Option C]
-        default: Option A
-      - name: Run ID
-        type: text
-        default: ""
-        required: true     # Blocks logging if empty
+- name: Run ID
+  type: auto_increment
+  format: prefixed      # padded | prefixed
+  prefix: "RUN"         # used when format: prefixed
+  pad: 3                # zero-pad width → RUN001
+  start: 1              # starting number
 ```
 
-**Types:** `float`, `integer`, `text`, `select`
-
-Add up to 5–6 groups with 5–6 variables each — the UI arranges them automatically in a 2-column grid.
+**Other variable options:**
+```yaml
+- name: My Variable
+  type: float
+  default: 0.0
+  required: true        # blocks logging if empty
+```
 
 ---
 
-## Shared Data: Google Sheets Backend (Optional)
+## Google Sheets Setup
 
-For true multi-user shared logging (everyone writes to the same log in real time), you can replace the CSV backend with Google Sheets using the `gspread` library. Steps:
-
-1. Create a Google Service Account and share a Sheet with it
-2. Store credentials in `.streamlit/secrets.toml`
-3. Replace the `load_log()` and `append_log()` functions in `app.py` with gspread calls
-
-A drop-in replacement module can be added on request.
+See `SETUP_GOOGLE_SHEETS.md` for step-by-step instructions on creating a service account, enabling the API, and adding credentials to Streamlit Cloud secrets.
 
 ---
 
 ## File Structure
-
 ```
-experiment_logger/
-├── app.py              # Main Streamlit app
-├── config.yaml         # Variable groups and field definitions
+bamprii-logging/
+├── app.py                      # Main Streamlit app
+├── config.yaml                 # Variable groups and field definitions
 ├── requirements.txt
 ├── .gitignore
-└── README.md
+├── MXI.png                     # Page icon
+├── README.md
+└── SETUP_GOOGLE_SHEETS.md      # Credentials setup guide
 ```
