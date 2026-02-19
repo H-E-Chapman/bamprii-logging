@@ -47,7 +47,12 @@ def load_log() -> pd.DataFrame:
         data = ws.get_all_records()
         if not data:
             return pd.DataFrame()
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        for col in df.columns:
+            converted = pd.to_numeric(df[col], errors="coerce")
+            if converted.notna().sum() > 0:
+                df[col] = converted
+        return df
     except Exception as e:
         st.warning(f"Could not load log from Google Sheets: {e}")
         return pd.DataFrame()
@@ -396,12 +401,9 @@ with tab_plot:
     with col_info:
         st.caption(f"Loaded **{len(df)}** runs. Press refresh to pull latest data from the sheet.")
 
-    # Force numeric conversion on anything that looks numeric
-    for col in df.columns:
-        converted = pd.to_numeric(df[col], errors="coerce")
-        # Only replace if majority of non-null values are numeric
-        if converted.notna().sum() > 0:
-            df[col] = converted
+        # Force numeric conversion on anything that looks numeric
+        for col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="ignore")
 
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
