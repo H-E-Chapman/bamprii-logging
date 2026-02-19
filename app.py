@@ -184,7 +184,7 @@ with st.sidebar:
         n_rows = 0
 
     if n_rows > 0:
-        if st.button("📥 Fetch & Download CSV", use_container_width=True):
+        if st.button("📥 Fetch & Download CSV", width='stretch'):
             with st.spinner("Fetching data..."):
                 df_log = load_log()
             csv_bytes = df_log.to_csv(index=False).encode()
@@ -295,10 +295,10 @@ with tab_log:
         col1, col2, col3 = st.columns([1, 1, 3])
 
         with col1:
-            log_pressed = st.button("📋 Log Run", type="primary", use_container_width=True)
+            log_pressed = st.button("📋 Log Run", type="primary", width='stretch')
 
         with col2:
-            if st.button("🔄 Reset Fields", use_container_width=True):
+            if st.button("🔄 Reset Fields", width='stretch'):
                 for group in groups:
                     for var in group["variables"]:
                         key = f"val_{group['name']}_{var['name']}"
@@ -369,7 +369,7 @@ with tab_log:
         else:
             st.dataframe(
                 df_log.tail(20).iloc[::-1],
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
             st.caption(f"Showing last 20 of {len(df_log)} total runs.")
@@ -384,7 +384,7 @@ with tab_plot:
 
     col_refresh, col_info = st.columns([1, 4])
     with col_refresh:
-        if st.button("🔄 Load / Refresh Data", type="primary", use_container_width=True):
+        if st.button("🔄 Load / Refresh Data", type="primary", width='stretch'):
             with st.spinner("Pulling from Google Sheets..."):
                 st.session_state.df_cache = load_log()
 
@@ -639,7 +639,7 @@ with tab_plot:
         legend=dict(orientation="v", x=1.02, y=1),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # ── Legend note ───────────────────────────────────────────────────────────
 
@@ -659,5 +659,5 @@ with tab_plot:
             stat_cols = [c for c in [x_col, y_col] if c in plottable_cols]
             st.dataframe(
                 df_filtered[stat_cols].describe().round(4),
-                use_container_width=True,
+                width='stretch',
             )
