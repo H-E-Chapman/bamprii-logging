@@ -3,8 +3,11 @@ groups:
     always_on: true
     variables:
       - name: Run ID
-        type: text
-        default: ""
+        type: auto_increment
+        format: prefixed
+        prefix: "RUN"
+        pad: 4
+        start: 1
         required: true
       - name: Operator
         type: text
@@ -40,8 +43,10 @@ groups:
         type: float
         default: 0
       - name: X-ray scan number
-        type: integer
-        default: 0
+        type: auto_increment
+        format: padded
+        pad: 4
+        start: 1
 
   - name: Materials
     always_on: true

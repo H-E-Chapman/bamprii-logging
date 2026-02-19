@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pathlib
+import re
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,6 @@ SCOPES = [
 
 @st.cache_resource
 def get_worksheet():
-    """Connect to Google Sheets using credentials stored in Streamlit secrets."""
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
@@ -40,7 +40,6 @@ def get_worksheet():
     return worksheet
 
 def load_log() -> pd.DataFrame:
-    """Read all rows from the Google Sheet."""
     try:
         ws = get_worksheet()
         data = ws.get_all_records()
@@ -52,25 +51,75 @@ def load_log() -> pd.DataFrame:
         return pd.DataFrame()
 
 def append_log(row: dict):
-    """Append a single row to the Google Sheet, writing headers if needed."""
     ws = get_worksheet()
     existing = ws.get_all_values()
-
     if not existing:
-        # Sheet is empty — write header row first
         ws.append_row(list(row.keys()), value_input_option="USER_ENTERED")
     else:
-        # Check if any new columns need adding
         current_headers = existing[0]
         new_headers = [k for k in row.keys() if k not in current_headers]
         if new_headers:
-            updated_headers = current_headers + new_headers
-            ws.update("1:1", [updated_headers])
-        # Align row values to current headers
+            ws.update("1:1", [current_headers + new_headers])
         current_headers = ws.row_values(1)
         row = {k: row.get(k, "") for k in current_headers}
-
     ws.append_row(list(row.values()), value_input_option="USER_ENTERED")
+
+# ── Auto-increment helpers ────────────────────────────────────────────────────
+
+def format_counter(n: int, var: dict) -> str:
+    """
+    Format an integer counter according to the variable's format spec.
+
+    format options in config:
+      padded      →  0001  0042  0600        (pad to `pad` digits, default 4)
+      prefixed    →  ID001  RUN042           (prefix string + padded number)
+    """
+    fmt = var.get("format", "padded")
+    pad = int(var.get("pad", 4))
+    prefix = var.get("prefix", "")
+
+    if fmt == "prefixed":
+        return f"{prefix}{str(n).zfill(pad)}"
+    else:  # padded (default)
+        return str(n).zfill(pad)
+
+def extract_counter(value: str, var: dict) -> int | None:
+    """Pull the numeric part out of a formatted counter string."""
+    fmt = var.get("format", "padded")
+    prefix = var.get("prefix", "")
+    try:
+        if fmt == "prefixed" and prefix:
+            stripped = value.replace(prefix, "")
+        else:
+            stripped = value
+        return int(re.sub(r"[^0-9]", "", stripped))
+    except (ValueError, TypeError):
+        return None
+
+def get_last_counter(col_name: str, var: dict) -> int:
+    """
+    Read the Google Sheet and find the highest counter value in col_name.
+    Falls back to (start - 1) if no values exist yet.
+    """
+    start = int(var.get("start", 1))
+    try:
+        ws = get_worksheet()
+        all_values = ws.get_all_values()
+        if not all_values or len(all_values) < 2:
+            return start - 1
+        headers = all_values[0]
+        if col_name not in headers:
+            return start - 1
+        col_idx = headers.index(col_name)
+        nums = []
+        for row in all_values[1:]:
+            if col_idx < len(row) and row[col_idx]:
+                n = extract_counter(row[col_idx], var)
+                if n is not None:
+                    nums.append(n)
+        return max(nums) if nums else start - 1
+    except Exception:
+        return start - 1
 
 # ── Load config ───────────────────────────────────────────────────────────────
 
@@ -89,11 +138,19 @@ for group in groups:
     if key not in st.session_state:
         st.session_state[key] = True
 
+# For auto_increment fields, seed from the sheet on first load
 for group in groups:
     for var in group["variables"]:
         key = f"val_{group['name']}_{var['name']}"
         if key not in st.session_state:
-            st.session_state[key] = var.get("default", "")
+            if var.get("type") == "auto_increment":
+                col_name = f"{group['name']} — {var['name']}"
+                last = get_last_counter(col_name, var)
+                next_n = last + 1
+                st.session_state[key] = format_counter(next_n, var)
+                st.session_state[f"_counter_{key}"] = next_n
+            else:
+                st.session_state[key] = var.get("default", "")
 
 if "log_message" not in st.session_state:
     st.session_state.log_message = None
@@ -175,7 +232,29 @@ for i in range(0, len(active_groups), 2):
                     required = var.get("required", False)
                     display_label = f"{label} *" if required else label
 
-                    if vtype == "float":
+                    if vtype == "auto_increment":
+                        # Show as read-only display + manual override option
+                        current_val = st.session_state[val_key]
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            override = st.text_input(
+                                display_label,
+                                value=current_val,
+                                key=f"input_{val_key}",
+                                help="Auto-increments on log. Edit manually to override.",
+                            )
+                            st.session_state[val_key] = override
+                        with c2:
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("🔁", key=f"resync_{val_key}", help="Re-sync from sheet"):
+                                col_name = f"{group['name']} — {var['name']}"
+                                last = get_last_counter(col_name, var)
+                                next_n = last + 1
+                                st.session_state[val_key] = format_counter(next_n, var)
+                                st.session_state[f"_counter_{val_key}"] = next_n
+                                st.rerun()
+
+                    elif vtype == "float":
                         st.session_state[val_key] = st.number_input(
                             display_label,
                             value=float(st.session_state[val_key]),
@@ -219,10 +298,18 @@ with col2:
         for group in groups:
             for var in group["variables"]:
                 key = f"val_{group['name']}_{var['name']}"
-                st.session_state[key] = var.get("default", "")
+                if var.get("type") == "auto_increment":
+                    col_name = f"{group['name']} — {var['name']}"
+                    last = get_last_counter(col_name, var)
+                    next_n = last + 1
+                    st.session_state[key] = format_counter(next_n, var)
+                    st.session_state[f"_counter_{key}"] = next_n
+                else:
+                    st.session_state[key] = var.get("default", "")
         st.rerun()
 
 if log_pressed:
+    # Validate required fields
     missing = []
     for group in active_groups:
         for var in group["variables"]:
@@ -247,6 +334,18 @@ if log_pressed:
         try:
             with st.spinner("Saving to Google Sheets..."):
                 append_log(row)
+
+            # Advance all auto_increment counters after a successful log
+            for group in active_groups:
+                for var in group["variables"]:
+                    if var.get("type") == "auto_increment":
+                        key = f"val_{group['name']}_{var['name']}"
+                        counter_key = f"_counter_{key}"
+                        current_n = st.session_state.get(counter_key, int(var.get("start", 1)))
+                        next_n = current_n + 1
+                        st.session_state[key] = format_counter(next_n, var)
+                        st.session_state[counter_key] = next_n
+
             run_id = row.get("General — Run ID", "—")
             st.session_state.log_message = (
                 "success",
