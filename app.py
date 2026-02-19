@@ -155,6 +155,7 @@ if "log_message" not in st.session_state:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    st.image(str(_HERE / "MXI_logo.png"), width=240)
     st.title("Blown-powder Additive Manufacturing Process Replicator, version II (BAMPR-II)")
     st.markdown("---")
     st.subheader("Active Equipment")
