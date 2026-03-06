@@ -1,3 +1,8 @@
+default_plot_x: "Laser Processing Parameters: Scan Speed (mm/s)"
+default_plot_y: "Laser Processing Parameters: Laser Power (W)"
+default_plot_colour: "Materials: Substrate material"
+default_filters:
+  "General: Experiment type": ["Weld", "AM"]
 groups:
   - name: General
     always_on: true
@@ -87,7 +92,7 @@ groups:
         type: float
         default: 35.14
 
-  - name: Equipment in use
+  - name: BAMPR-II Equipment
     always_on: true
     variables:
       - name: Laser
@@ -96,6 +101,9 @@ groups:
       - name: Powder feeder
         type: text
         default: "GTV PF 2/2 LC"
+      - name: Nozzle
+        type: text
+        default: "HighNo 4.0 - 7mm standoff"
       - name: Sample manipulation
         type: text
         default: "Meca500 6-axis Robotic arm"
