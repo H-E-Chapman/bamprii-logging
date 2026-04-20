@@ -68,6 +68,8 @@ def _load_last_values(groups: list, logger: SheetLogger) -> None:
 
     for group in groups:
         for var in group["variables"]:
+            if var.get("type") == "auto_increment":
+                continue
             base_key = f"{group['name']}_{var['name']}"
             column = col_name(group["name"], var["name"])
 
@@ -76,6 +78,7 @@ def _load_last_values(groups: list, logger: SheetLogger) -> None:
 
     for k, v in updates.items():
         st.session_state[k] = v
+        st.session_state[f"_pending_input_{k}"] = v
 
 def _render_action_buttons(active_groups: list, groups: list, logger: SheetLogger) -> None:
     """Render the Log Run and Reset Fields buttons and handle their actions."""
@@ -136,7 +139,6 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
     elif vtype == "float":
         st.session_state[val_key] = st.number_input(
             display_label,
-            value=float(st.session_state[val_key]),
             key=f"input_{val_key}",
             format="%.3f",
             help=help_text,
@@ -144,25 +146,21 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
     elif vtype == "integer":
         st.session_state[val_key] = st.number_input(
             display_label,
-            value=int(st.session_state[val_key]),
             key=f"input_{val_key}",
             step=1,
             help=help_text,
         )
     elif vtype == "select":
         options = var.get("options", [])
-        current = st.session_state[val_key]
         st.session_state[val_key] = st.selectbox(
             display_label,
             options=options,
-            index=options.index(current) if current in options else 0,
             key=f"input_{val_key}",
             help=help_text,
         )
     else:
         st.session_state[val_key] = st.text_input(
             display_label,
-            value=str(st.session_state[val_key]),
             key=f"input_{val_key}",
             help=help_text,
         )

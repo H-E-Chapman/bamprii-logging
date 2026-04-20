@@ -229,7 +229,10 @@ def _aggregate(
 
     id_col = next((c for c in all_cols if "run" in c.lower() and "id" in c.lower()), None)
     if id_col:
-        agg_dict["_runs"] = (id_col, lambda x: ", ".join(x.astype(str).tolist()))
+        agg_dict["_runs"] = (
+            id_col,
+            lambda x: ", ".join(str(v) for v in x.dropna())
+        )
 
     grouped = (
         plot_df
