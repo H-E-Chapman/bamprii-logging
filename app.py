@@ -83,8 +83,8 @@ with st.sidebar:
     st.title("Blown-powder Additive Manufacturing Process Replicator, version II (BAMPR-II)")
     st.markdown("---")
     st.subheader("Usage")
-    st.text("Fill in variables for the current print. the variables can be reset to the defaults,"
-               " or to the last set of variables at the bottom."
+    st.text("Fill in variables for the current print. Variables can be reset to the defaults,"
+               " or to the last set."
                "\nOnce printed, log the run with the red button at the bottom")
     st.markdown("---")
     st.subheader("Active Equipment")
