@@ -75,6 +75,7 @@ Groups and variables are defined in `config.yaml`. No code changes are needed to
 - name: My Variable
   type: float
   default: 0.0
+  help: ""              # sets help text for info
   required: true        # blocks logging if empty
 ```
 
@@ -91,8 +92,8 @@ See `SETUP_GOOGLE_SHEETS.md` for step-by-step instructions on creating a service
 ```
 bamprii-logging/
 ├── app.py                      # Entry point: page config, session state, sidebar, tab layout
-├── log_tab.py                  # Log Scan tab (tab 1): input form, validation, run logging
-├── visualisation.py            # Plot Results tab (tab 2): filters, axis config, bubble chart
+├── tab_log.py                  # Log Scan tab (tab 1): input form, validation, run logging
+├── tab_plot.py            # Plot Results tab (tab 2): filters, axis config, bubble chart
 ├── sheets.py                   # SheetLogger class: all Google Sheets read/write logic
 ├── config.py                   # Config loading and derived helpers (col names, filterable cols)
 ├── utility.py                  # Pure formatting helpers for auto-increment counters
