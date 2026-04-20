@@ -16,8 +16,8 @@ import streamlit as st
 from config import load_config, col_name
 from sheets import get_sheet_logger
 from utility import format_counter
-from log_tab import render_log_tab
-from visualisation import render_plot_tab
+from tab_log import render_log_tab
+from tab_plot import render_plot_tab
 
 # ── Page setup ────────────────────────────────────────────────────────────────
 
