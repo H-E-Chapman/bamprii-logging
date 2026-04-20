@@ -43,7 +43,7 @@ logger = get_sheet_logger()
 for group in groups:
     for var in group["variables"]:
         if var.get("type") == "auto_increment":
-            val_key    = f"val_{group['name']}_{var['name']}"
+            val_key    = f"{group['name']}_{var['name']}"
             widget_key = f"input_{val_key}"
             pending    = f"_pending_{widget_key}"
             if pending in st.session_state:
@@ -57,7 +57,7 @@ for group in groups:
 
 for group in groups:
     for var in group["variables"]:
-        key = f"val_{group['name']}_{var['name']}"
+        key = f"{group['name']}_{var['name']}"
         if key not in st.session_state:
             if var.get("type") == "auto_increment":
                 c = col_name(group["name"], var["name"])
