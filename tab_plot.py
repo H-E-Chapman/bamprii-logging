@@ -34,7 +34,7 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
     with col_info:
         st.caption(f"Loaded **{len(df)}** runs. Press refresh to pull latest data from the sheet.")
         for col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="ignore")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
