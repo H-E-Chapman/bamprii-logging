@@ -19,6 +19,11 @@ class SheetLogger:
     """Encapsulates all read/write operations against the 'Log' worksheet."""
 
     def __init__(self) -> None:
+        if "gcp_service_account" not in st.secrets:
+            raise RuntimeError("Missing gcp_service_account in Streamlit secrets")
+
+        if "google_sheets" not in st.secrets:
+            raise RuntimeError("Missing google_sheets in Streamlit secrets")
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         client = gspread.authorize(creds)
