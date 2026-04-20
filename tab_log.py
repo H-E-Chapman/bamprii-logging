@@ -1,5 +1,5 @@
 """
-log_tab.py — Renders the Log Scan tab (tab 1).
+tab_log.py — Renders the Log Scan tab (tab 1).
 
 Call render_log_tab(logger, groups) from app.py inside the tab_log
 context manager.
@@ -55,16 +55,39 @@ def _render_input_cards(active_groups: list, logger: SheetLogger) -> None:
                     for var in group["variables"]:
                         _render_variable_input(group, var, logger)
 
+def _load_last_values(groups: list, logger: SheetLogger) -> None:
+    """Load the most recent row from the sheet into the input fields."""
+    df = logger.load()
+
+    if df.empty:
+        st.session_state.log_message = ("error", "No previous runs to load.")
+        return
+
+    last_row = df.iloc[-1]
+
+    for group in groups:
+        for var in group["variables"]:
+            key = f"val_{group['name']}_{var['name']}"
+            column = col_name(group["name"], var["name"])
+
+            if column in last_row:
+                st.session_state[key] = last_row[column]
 
 def _render_action_buttons(active_groups: list, groups: list, logger: SheetLogger) -> None:
     """Render the Log Run and Reset Fields buttons and handle their actions."""
     st.markdown("---")
-    col1, col2, col3 = st.columns([1, 1, 3])
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        log_pressed = st.button("📋 Log Run", type="primary", width="stretch")
+        if st.button("⏮️ Use Last Values", width="stretch"):
+            _load_last_values(groups, logger)
+            st.rerun()
 
     with col2:
+        log_pressed = st.button("📋 Log Run", type="primary", width="stretch")
+
+
+    with col3:
         if st.button("🔄 Reset Fields", width="stretch"):
             _reset_fields(groups, logger)
             st.rerun()
@@ -90,6 +113,7 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
     val_key = f"val_{group['name']}_{var['name']}"
     vtype = var.get("type", "text")
     display_label = f"{var['name']} *" if var.get("required") else var["name"]
+    help_text=var.get("help","")
 
     if vtype == "auto_increment":
         c1, c2 = st.columns([3, 1])
@@ -97,7 +121,7 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
             override = st.text_input(
                 display_label,
                 key=f"input_{val_key}",
-                help="Auto-increments on log. Edit manually to override.",
+                help=help_text or "Auto-increments on log. Edit manually to override.",
             )
             st.session_state[val_key] = override
         with c2:
@@ -112,6 +136,7 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
             value=float(st.session_state[val_key]),
             key=f"input_{val_key}",
             format="%.3f",
+            help=help_text,
         )
     elif vtype == "integer":
         st.session_state[val_key] = st.number_input(
@@ -119,6 +144,7 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
             value=int(st.session_state[val_key]),
             key=f"input_{val_key}",
             step=1,
+            help=help_text,
         )
     elif vtype == "select":
         options = var.get("options", [])
@@ -128,12 +154,14 @@ def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
             options=options,
             index=options.index(current) if current in options else 0,
             key=f"input_{val_key}",
+            help=help_text,
         )
     else:
         st.session_state[val_key] = st.text_input(
             display_label,
             value=str(st.session_state[val_key]),
             key=f"input_{val_key}",
+            help=help_text,
         )
 
 
