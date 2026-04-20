@@ -56,27 +56,31 @@ def _render_input_cards(active_groups: list, logger: SheetLogger) -> None:
                         _render_variable_input(group, var, logger)
 
 def _load_last_values(groups: list, logger: SheetLogger) -> None:
-    """Load the most recent row from the sheet into the input fields."""
     df = logger.load()
 
     if df.empty:
-        st.session_state.log_message = ("error", "No previous runs to load.")
+        st.session_state["log_message"] = ("error", "No previous runs to load.")
         return
 
     last_row = df.iloc[-1]
 
+    updates = {}
+
     for group in groups:
         for var in group["variables"]:
-            key = f"val_{group['name']}_{var['name']}"
+            base_key = f"{group['name']}_{var['name']}"
             column = col_name(group["name"], var["name"])
 
-            if column in last_row:
-                st.session_state[key] = last_row[column]
+            if column in last_row.index:
+                updates[base_key] = last_row[column]
+
+    for k, v in updates.items():
+        st.session_state[k] = v
 
 def _render_action_buttons(active_groups: list, groups: list, logger: SheetLogger) -> None:
     """Render the Log Run and Reset Fields buttons and handle their actions."""
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([1,2,1])
 
     with col1:
         if st.button("⏮️ Use Last Values", width="stretch"):
@@ -84,16 +88,15 @@ def _render_action_buttons(active_groups: list, groups: list, logger: SheetLogge
             st.rerun()
 
     with col2:
-        log_pressed = st.button("📋 Log Run", type="primary", width="stretch")
-
+        if st.button("📋 Log Run", type="primary", width="stretch"):
+            _handle_log_run(active_groups, logger)
+            st.rerun()
 
     with col3:
         if st.button("🔄 Reset Fields", width="stretch"):
             _reset_fields(groups, logger)
             st.rerun()
 
-    if log_pressed:
-        _handle_log_run(active_groups, logger)
 
 
 def _render_recent_runs(logger: SheetLogger) -> None:
@@ -110,7 +113,7 @@ def _render_recent_runs(logger: SheetLogger) -> None:
 
 def _render_variable_input(group: dict, var: dict, logger: SheetLogger) -> None:
     """Render the correct Streamlit widget for a single variable."""
-    val_key = f"val_{group['name']}_{var['name']}"
+    val_key = f"{group['name']}_{var['name']}"
     vtype = var.get("type", "text")
     display_label = f"{var['name']} *" if var.get("required") else var["name"]
     help_text=var.get("help","")
@@ -180,7 +183,7 @@ def _reset_fields(groups: list, logger: SheetLogger) -> None:
     """Reset all fields to defaults, re-syncing auto-increment counters from the sheet."""
     for group in groups:
         for var in group["variables"]:
-            key = f"val_{group['name']}_{var['name']}"
+            key = f"{group['name']}_{var['name']}"
             if var.get("type") == "auto_increment":
                 _resync_counter(group, var, key, logger)
             else:
@@ -194,7 +197,7 @@ def _handle_log_run(active_groups: list, logger: SheetLogger) -> None:
         for group in active_groups
         for var in group["variables"]
         if var.get("required")
-        and not str(st.session_state[f"val_{group['name']}_{var['name']}"]).strip()
+        and not str(st.session_state[f"{group['name']}_{var['name']}"]).strip()
     ]
 
     if missing:
@@ -209,7 +212,7 @@ def _handle_log_run(active_groups: list, logger: SheetLogger) -> None:
     for group in active_groups:
         for var in group["variables"]:
             row[col_name(group["name"], var["name"])] = (
-                st.session_state[f"val_{group['name']}_{var['name']}"]
+                st.session_state[f"{group['name']}_{var['name']}"]
             )
 
     try:
@@ -219,7 +222,7 @@ def _handle_log_run(active_groups: list, logger: SheetLogger) -> None:
         for group in active_groups:
             for var in group["variables"]:
                 if var.get("type") == "auto_increment":
-                    key = f"val_{group['name']}_{var['name']}"
+                    key = f"{group['name']}_{var['name']}"
                     counter_key = f"_counter_{key}"
                     current_n = st.session_state.get(counter_key, int(var.get("start", 1)))
                     next_n = current_n + 1
@@ -228,7 +231,7 @@ def _handle_log_run(active_groups: list, logger: SheetLogger) -> None:
                     st.session_state[counter_key] = next_n
                     st.session_state[f"_pending_input_{key}"] = formatted
 
-        run_id = row.get("General — Run ID", "—")
+        run_id = row.get(col_name("General", "Run ID"), "—")
         st.session_state.log_message = (
             "success",
             f"✅ Run '{run_id}' logged at {row['Timestamp']}",
