@@ -1,5 +1,5 @@
 """
-visualisation.py — Renders the Plot Results tab (tab 2).
+tab_plot.py — Renders the Plot Results tab (tab 2).
 """
 
 import streamlit as st
