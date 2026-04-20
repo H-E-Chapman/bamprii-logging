@@ -13,19 +13,23 @@ groups:
         prefix: "RUN"
         pad: 4
         start: 1
+        help: ""
         required: true
       - name: Operator
         type: text
         default: ""
+        help: "Current Operator / Shift Leader initials. Ex: HEC/YH/SB"
         required: true
       - name: Experiment type
         type: select
         options: [Setup, Weld, AM, Flat]
         default: Setup
+        help: "Type of Experiment"
         required: true
       - name: Notes
         type: text
         default: ""
+        help: "Free text entry. Add notes on the run here"
         required: false
 
   - name: X-ray beam settings
@@ -35,23 +39,29 @@ groups:
         type: select
         options: [DLS I12, ESRF ID19, HEPS ID23, APS ID32, Other]
         default: DLS I12
+        help: "Current beamline or Laboratory Environment"
       - name: Beam Energy (KeV)
         type: float
         default: 0
+        help: ""
       - name: Exposure time (us)
         type: float
         default: 0
+        help: ""
       - name: Framerate (kfps)
         type: float
         default: 0
+        help: ""
       - name: Pixel Size (um)
         type: float
         default: 0
+        help: ""
       - name: X-ray scan number
         type: auto_increment
         format: padded
         pad: 4
         start: 1
+        help: ""
 
   - name: Materials
     always_on: true
@@ -60,12 +70,15 @@ groups:
       - name: Substrate ID
         type: text
         default: ""
+        help: ""
       - name: Substrate material
         type: text
         default: ""
+        help: ""
       - name: Powder material
         type: text
         default: ""
+        help: ""
 
   - name: Laser Processing Parameters
     always_on: true
@@ -74,12 +87,15 @@ groups:
       - name: Laser Power (W)
         type: float
         default: 0
+        help: ""
       - name: Scan Speed (mm/s)
         type: float
         default: 0
+        help: ""
       - name: Laser Spot Size (mm)
         type: float
         default: 0
+        help: ""
 
   - name: Ultrasonic Processing Parameters
     always_on: false
@@ -88,9 +104,11 @@ groups:
       - name: Amplitude (%)
         type: float
         default: 0
+        help: ""
       - name: Frequency (kHz)
         type: float
         default: 35.14
+        help: ""
 
   - name: BAMPR-II Equipment
     always_on: true
@@ -98,12 +116,16 @@ groups:
       - name: Laser
         type: text
         default: "TruFiber 500 P compact (FD44-A)"
+        help: ""
       - name: Powder feeder
         type: text
         default: "GTV PF 2/2 LC"
+        help: ""
       - name: Nozzle
         type: text
         default: "HighNo 4.0 - 7mm standoff"
+        help: ""
       - name: Sample manipulation
         type: text
         default: "Meca500 6-axis Robotic arm"
+        help: ""
