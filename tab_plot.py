@@ -12,7 +12,7 @@ from sheets import SheetLogger
 
 
 def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
-    st.title("Plot")
+    st.title("Experiment visualisation")
 
     col_refresh, col_info = st.columns([1, 4])
     with col_refresh:

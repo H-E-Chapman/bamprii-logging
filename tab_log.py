@@ -15,7 +15,7 @@ from utility import format_counter
 
 
 def render_log_tab(logger: SheetLogger, groups: list) -> None:
-    st.title("Log Scan")
+    st.title("Experiment Logger")
 
     _flash_message()
 

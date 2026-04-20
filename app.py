@@ -24,7 +24,7 @@ from tab_plot import render_plot_tab
 _HERE = pathlib.Path(__file__).parent
 
 st.set_page_config(
-    page_title="BAMPR-II log",
+    page_title="BAMPR-II Log",
     page_icon=str(_HERE / "MXI.png"),
     layout="wide",
     initial_sidebar_state="expanded",
@@ -103,7 +103,7 @@ with st.sidebar:
             )
 
     st.markdown("---")
-    st.subheader("Log")
+    st.subheader("Log Details")
 
     n_rows = logger.row_count()
     if n_rows:
