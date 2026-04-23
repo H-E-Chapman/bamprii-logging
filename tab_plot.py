@@ -25,7 +25,7 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
         st.info("Press **Load / Refresh Data** to fetch runs from the sheet.")
         return
 
-    df = st.session_state.df_cache
+    df = st.session_state.df_cache.copy()
 
     if df.empty:
         st.info("No data logged yet — come back once you have some runs.")
@@ -33,8 +33,6 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
 
     with col_info:
         st.caption(f"Loaded **{len(df)}** runs. Press refresh to pull latest data from the sheet.")
-        for col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
@@ -139,8 +137,11 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
 
 def _render_filter_panel(df: pd.DataFrame, filterable: list, config: dict) -> pd.DataFrame:
     """Render the filter expander and return the filtered DataFrame."""
-    with st.expander("🔍 Filter Data", expanded=True):
+    with st.expander("🔍 Filter Data", expanded=False):
         st.caption("Filter runs before plotting.")
+        if st.button("Reset filters"):
+            st.session_state["_reset_filters"] = True
+            st.rerun()
         df_filtered = df.copy()
         filter_cols = st.columns(3)
         default_filters = config.get("default_filters", {})
@@ -152,8 +153,17 @@ def _render_filter_panel(df: pd.DataFrame, filterable: list, config: dict) -> pd
                     [v for v in default_filters.get(col, unique_vals) if v in unique_vals]
                     if col in default_filters else unique_vals
                 )
-                selected = st.multiselect(col, options=unique_vals, default=filter_default,
-                                          key=f"filter_{col}")
+                key = f"filter_{col}"
+
+                if st.session_state.get("_reset_filters"):
+                    st.session_state[key] = filter_default
+
+                selected = st.multiselect(
+                    col,
+                    options=unique_vals,
+                    default=filter_default,
+                    key=key
+                )
                 if selected:
                     df_filtered = df_filtered[df_filtered[col].isin(selected)]
 
@@ -164,6 +174,8 @@ def _render_filter_panel(df: pd.DataFrame, filterable: list, config: dict) -> pd
                 min_date, max_date = valid_dates.min().date(), valid_dates.max().date()
                 if min_date < max_date:
                     with filter_cols[len(filterable) % 3]:
+                        if st.session_state.get("_reset_filters"):
+                            st.session_state["filter_date"] = (min_date, max_date)
                         date_range = st.date_input(
                             "Date range", value=(min_date, max_date),
                             min_value=min_date, max_value=max_date,
@@ -176,6 +188,9 @@ def _render_filter_panel(df: pd.DataFrame, filterable: list, config: dict) -> pd
                             ]
 
         st.caption(f"Showing **{len(df_filtered)}** of {len(df)} runs after filtering.")
+
+    st.session_state.pop("_reset_filters", None)
+
     return df_filtered
 
 
