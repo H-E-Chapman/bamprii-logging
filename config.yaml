@@ -26,6 +26,14 @@ groups:
         default: Setup
         help: "Type of Experiment"
         required: true
+    - name: Layer number
+        type: integer
+        default: 0
+        help: ""
+    - name: Build location
+        type: integer
+        default: 0
+        help: ""
       - name: Notes
         type: text
         default: ""
@@ -63,7 +71,7 @@ groups:
         start: 1
         help: ""
 
-  - name: Materials
+  - name: Sample
     always_on: true
     filterable: true
     variables:
@@ -78,6 +86,10 @@ groups:
       - name: Powder material
         type: text
         default: ""
+        help: ""
+      - name: Sample manipulation
+        type: text
+        default: "Meca500 6-axis Robotic arm"
         help: ""
 
   - name: Laser Processing Parameters
@@ -96,17 +108,13 @@ groups:
         type: float
         default: 0
         help: ""
-     - name: Layer number
-        type: integer
-        default: 0
+      - name: Laser
+        type: text
+        default: "TruFiber 500 P compact (FD44-A)"
         help: ""
-    - name: Build location
-        type: integer
-        default: 0
-        help: ""
-    - name: Feed rate (rpm)
-        type: integer
-        default: 0
+      - name: Optics
+        type: text
+        default: "Optogama beam reducer"
         help: ""
 
 
@@ -123,22 +131,27 @@ groups:
         default: 35.14
         help: ""
 
-  - name: BAMPR-II Equipment
+  - name: Powder delivery
     always_on: true
     variables:
-      - name: Laser
-        type: text
-        default: "TruFiber 500 P compact (FD44-A)"
+      - name: Feed rate (rpm)
+        type: float
+        default: 0
         help: ""
+      - name: Shield Gas (lpm)
+        type: float
+        default: 0
+        help: ""
+      - name: Carrier gas (lpm)
+        type: float
+        default: 0
+        help: ""        
       - name: Powder feeder
         type: text
         default: "GTV PF 2/2 LC"
         help: ""
       - name: Nozzle
-        type: text
-        default: "HighNo 4.0 - 7mm standoff"
-        help: ""
-      - name: Sample manipulation
-        type: text
-        default: "Meca500 6-axis Robotic arm"
+        type: select
+        options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 19 degree, Other (add in notes)]
+        default: HighNo 4.0 - 7mm standoff
         help: ""
