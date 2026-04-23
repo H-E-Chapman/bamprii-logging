@@ -37,8 +37,6 @@ groups = config["groups"]
 logger = get_sheet_logger()
 
 # ── Flush pending widget values ───────────────────────────────────────────────
-# Auto-increment widgets stage their next value under _pending_<key> so it can
-# be written to the widget key before the widget is drawn on the next rerun.
 
 for group in groups:
     for var in group["variables"]:
@@ -49,10 +47,6 @@ for group in groups:
             st.session_state[widget_key] = st.session_state.pop(pending)
 
 # ── Session state init ────────────────────────────────────────────────────────
-
-for group in groups:
-    if f"active_{group['name']}" not in st.session_state:
-        st.session_state[f"active_{group['name']}"] = True
 
 for group in groups:
     for var in group["variables"]:
@@ -77,9 +71,13 @@ if "log_message" not in st.session_state:
 if "df_cache" not in st.session_state:
     st.session_state.df_cache = None
 
+# ── active_groups ─────────────────────────────────────────────────────────────
 active_groups = [
     g for g in groups
-    if g.get("always_on") or st.session_state.get(f"active_{g['name']}")
+    if g.get("always_on") or st.session_state.get(
+        f"toggle_{g['name']}",
+        st.session_state.get(f"active_{g['name']}", True),
+    )
 ]
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -115,10 +113,9 @@ with st.sidebar:
         if group.get("always_on"):
             st.markdown(f"✅ **{group['name']}** *(always on)*")
         else:
-            key = f"active_{group['name']}"
-            st.session_state[key] = st.checkbox(
+            st.checkbox(
                 group["name"],
-                value=st.session_state[key],
+                value=st.session_state.get(f"active_{group['name']}", True),
                 key=f"toggle_{group['name']}",
             )
 
@@ -146,7 +143,7 @@ with st.sidebar:
 tab_log, tab_plot = st.tabs(["📋 Log Scan", "📈 Plot Results"])
 
 with tab_log:
-    render_log_tab(logger,active_groups, groups)
+    render_log_tab(logger, active_groups, groups)
 
 with tab_plot:
     render_plot_tab(logger, groups, config)
