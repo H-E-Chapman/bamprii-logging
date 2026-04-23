@@ -183,8 +183,6 @@ def _apply_plot_defaults(
     plottable_cols: list, filterable_col_names: list, df: pd.DataFrame, config: dict
 ) -> None:
     """Write plot axis defaults into session_state on first load or config change."""
-    st.write(plottable_cols)
-    st.write(repr(config.get("default_plot_x", "")))
     fingerprint = (
         f"{config.get('default_plot_x', '')}|"
         f"{config.get('default_plot_y', '')}|"
