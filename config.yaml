@@ -4,6 +4,7 @@ default_plot_colour: "Materials: Substrate material"
 default_filters:
   "General: Experiment type": ["Weld", "AM"]
 groups:
+
   - name: General
     always_on: true
     variables:
@@ -39,38 +40,7 @@ groups:
         default: ""
         help: "Free text entry. Add notes on the run here"
         required: false
-
-  - name: X-ray beam settings
-    always_on: false
-    variables:
-      - name: Beamline
-        type: select
-        options: [DLS I12, ESRF ID19, HEPS ID23, APS ID32, Other]
-        default: DLS I12
-        help: "Current beamline or Laboratory Environment"
-      - name: Beam Energy (KeV)
-        type: float
-        default: 0
-        help: ""
-      - name: Exposure time (us)
-        type: float
-        default: 0
-        help: ""
-      - name: Framerate (kfps)
-        type: float
-        default: 0
-        help: ""
-      - name: Pixel Size (um)
-        type: float
-        default: 0
-        help: ""
-      - name: X-ray scan number
-        type: auto_increment
-        format: padded
-        pad: 4
-        start: 1
-        help: ""
-
+        
   - name: Sample
     always_on: true
     filterable: true
@@ -117,7 +87,6 @@ groups:
         default: "Optogama beam reducer"
         help: ""
 
-
   - name: Ultrasonic Processing Parameters
     always_on: false
     filterable: true
@@ -154,4 +123,58 @@ groups:
         type: select
         options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 19 degree, Other (add in notes)]
         default: HighNo 4.0 - 7mm standoff
+        help: ""
+
+  - name: X-ray beam settings
+    always_on: false
+    variables:
+      - name: Beamline
+        type: select
+        options: [DLS I12, ESRF ID19, HEPS ID23, APS ID32, Other]
+        default: DLS I12
+        help: "Current beamline or Laboratory Environment"
+      - name: Beam Energy (KeV)
+        type: float
+        default: 0
+        help: ""
+      - name: Exposure time (us)
+        type: float
+        default: 0
+        help: ""
+      - name: Framerate (kfps)
+        type: float
+        default: 0
+        help: ""
+      - name: Pixel Size (um)
+        type: float
+        default: 0
+        help: ""
+      - name: X-ray scan number
+        type: auto_increment
+        format: padded
+        pad: 4
+        start: 1
+        help: ""
+        
+  - name: IR Camera Settings
+    always_on: false
+    variables:
+      - name: Filter
+        type: select
+        options: [Empty, ND2, ND3, Other]
+        default: ND2
+        help: ""
+      - name: Temperature range (C)
+        type: text
+        default: 0
+        help: ""
+      - name: Framerate (kfps)
+        type: float
+        default: 0
+        help: ""
+      - name: IR scan number
+        type: auto_increment
+        format: padded
+        pad: 4
+        start: 1
         help: ""
