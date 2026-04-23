@@ -7,6 +7,7 @@ groups:
 
   - name: General
     always_on: true
+    filterable: true
     variables:
       - name: Run ID
         type: auto_increment
@@ -98,6 +99,7 @@ groups:
 
   - name: Powder delivery
     always_on: true
+    filterable: true
     variables:
       - name: Feed rate (rpm)
         type: float
