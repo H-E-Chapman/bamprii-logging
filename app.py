@@ -16,7 +16,7 @@ import streamlit as st
 from config import load_config, col_name
 from sheets import get_sheet_logger
 from utility import format_counter
-from tab_log import render_log_tab
+from tab_log import render_log_tab,_load_last_values,_handle_log_run,_reset_fields
 from tab_plot import render_plot_tab
 
 # ── Page setup ────────────────────────────────────────────────────────────────
@@ -77,6 +77,11 @@ if "log_message" not in st.session_state:
 if "df_cache" not in st.session_state:
     st.session_state.df_cache = None
 
+active_groups = [
+    g for g in groups
+    if g.get("always_on") or st.session_state.get(f"active_{g['name']}")
+]
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
@@ -87,6 +92,21 @@ with st.sidebar:
     st.text("Fill in variables for the current print. Variables can be reset to the defaults,"
                " or to the last set."
                "\nOnce printed, log the run with the red button at the bottom")
+
+    st.markdown("---")
+
+    if st.button("⏮️ Use Last Values", use_container_width=True):
+        _load_last_values(groups, logger)
+        st.rerun()
+
+    if st.button("📋 Log Run", type="primary", use_container_width=True):
+        _handle_log_run(active_groups, logger)
+        st.rerun()
+
+    if st.button("🔄 Reset Fields", use_container_width=True):
+        _reset_fields(groups, logger)
+        st.rerun()
+
     st.markdown("---")
     st.subheader("Active Equipment")
     st.caption("Toggle which variable sets are relevant for this session.")
@@ -126,7 +146,7 @@ with st.sidebar:
 tab_log, tab_plot = st.tabs(["📋 Log Scan", "📈 Plot Results"])
 
 with tab_log:
-    render_log_tab(logger, groups)
+    render_log_tab(logger,active_groups, groups)
 
 with tab_plot:
     render_plot_tab(logger, groups, config)
