@@ -17,9 +17,10 @@ groups:
         help: ""
         required: true
       - name: Operator
-        type: text
+        type: select
+        options: [HEC,SB,YW,XH]
         default: ""
-        help: "Current Operator / Shift Leader initials. Ex: HEC/YH/SB"
+        help: "Current Operator / Shift Leader initials."
         required: true
       - name: Experiment type
         type: select
@@ -93,19 +94,6 @@ groups:
       - name: Optics
         type: text
         default: "Optogama beam reducer"
-        help: ""
-
-  - name: Ultrasonic Processing Parameters
-    always_on: false
-    filterable: true
-    variables:
-      - name: Amplitude (%)
-        type: float
-        default: 0
-        help: ""
-      - name: Frequency (kHz)
-        type: float
-        default: 35.14
         help: ""
 
   - name: Powder delivery
@@ -190,4 +178,21 @@ groups:
         format: padded
         pad: 4
         start: 1
+        help: ""
+
+  - name: Ultrasonic Processing Parameters
+    always_on: false
+    filterable: true
+    variables:
+      - name: Amplitude (%)
+        type: float
+        default: 0
+        help: ""
+      - name: Frequency (kHz)
+        type: float
+        default: 35.14
+        help: ""
+      - name: Booster
+        type: select
+        options: [One, Two, None]
         help: ""
