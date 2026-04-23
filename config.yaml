@@ -96,6 +96,19 @@ groups:
         type: float
         default: 0
         help: ""
+     - name: Layer number
+        type: integer
+        default: 0
+        help: ""
+    - name: Build location
+        type: integer
+        default: 0
+        help: ""
+    - name: Feed rate (rpm)
+        type: integer
+        default: 0
+        help: ""
+
 
   - name: Ultrasonic Processing Parameters
     always_on: false
