@@ -13,16 +13,12 @@ from config import col_name
 from sheets import SheetLogger
 from utility import format_counter
 
+ncol = 3
 
-def render_log_tab(logger: SheetLogger, groups: list) -> None:
+def render_log_tab(logger: SheetLogger,active_groups:list, groups: list) -> None:
     st.title("Experiment Logger")
 
     _flash_message()
-
-    active_groups = [
-        g for g in groups
-        if g.get("always_on") or st.session_state.get(f"active_{g['name']}")
-    ]
 
     if not active_groups:
         st.warning("No equipment groups are active. Enable some in the sidebar.")
@@ -45,10 +41,10 @@ def _flash_message() -> None:
 
 
 def _render_input_cards(active_groups: list, logger: SheetLogger) -> None:
-    """Render variable input cards in a two-column grid."""
-    for i in range(0, len(active_groups), 2):
-        cols = st.columns(2)
-        for j, group in enumerate(active_groups[i : i + 2]):
+    """Render variable input cards in a ncol-column grid."""
+    for i in range(0, len(active_groups), ncol):
+        cols = st.columns(ncol)
+        for j, group in enumerate(active_groups[i : i + ncol]):
             with cols[j]:
                 with st.container(border=True):
                     st.subheader(group["name"])
@@ -83,7 +79,7 @@ def _load_last_values(groups: list, logger: SheetLogger) -> None:
 def _render_action_buttons(active_groups: list, groups: list, logger: SheetLogger) -> None:
     """Render the Log Run and Reset Fields buttons and handle their actions."""
     st.markdown("---")
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1,1,1])
 
     with col1:
         if st.button("⏮️ Use Last Values", width="stretch"):
