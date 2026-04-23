@@ -26,11 +26,11 @@ groups:
         default: Setup
         help: "Type of Experiment"
         required: true
-    - name: Layer number
+      - name: Layer number
         type: integer
         default: 0
         help: ""
-    - name: Build location
+      - name: Build location
         type: integer
         default: 0
         help: ""
