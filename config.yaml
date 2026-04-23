@@ -26,6 +26,10 @@ groups:
         options: [Setup, Weld, AM, Flat]
         default: Setup
         help: "Type of Experiment"
+      - name: Experiment group
+        type: text
+        default: ""
+        help: "Name of the group of experiments this scan belongs to"
         required: true
       - name: Layer number
         type: integer
@@ -54,6 +58,10 @@ groups:
         default: ""
         help: ""
       - name: Powder material
+        type: text
+        default: ""
+        help: ""
+      - name: Powder size distribution (um)
         type: text
         default: ""
         help: ""
@@ -126,7 +134,7 @@ groups:
         help: ""
       - name: Nozzle
         type: select
-        options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 19 degree, Other (add in notes)]
+        options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 17 degree, Other (add in notes)]
         default: HighNo 4.0 - 7mm standoff
         help: ""
 
