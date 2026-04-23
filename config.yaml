@@ -1,6 +1,6 @@
 default_plot_x: "Laser Processing Parameters: Scan Speed (mm/s)"
 default_plot_y: "Laser Processing Parameters: Laser Power (W)"
-default_plot_colour: "Materials: Substrate material"
+default_plot_colour: "Sample: Substrate material"
 default_filters:
   "General: Experiment type": ["Weld", "AM"]
 groups:
