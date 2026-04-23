@@ -119,6 +119,11 @@ groups:
         type: text
         default: "GTV PF 2/2 LC"
         help: ""
+      - name: Hopper type
+        type: select
+        options: [Full Hopper, Mini Hopper]
+        default: Full Hopper
+        help: ""
       - name: Nozzle
         type: select
         options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 19 degree, Other (add in notes)]
@@ -166,7 +171,7 @@ groups:
         help: ""
       - name: Temperature range (C)
         type: text
-        default: 0
+        default: ""
         help: ""
       - name: Framerate (kfps)
         type: float
