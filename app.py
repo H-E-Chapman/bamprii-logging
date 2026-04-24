@@ -105,7 +105,11 @@ with st.sidebar:
         _reset_fields(groups, logger)
         st.rerun()
 
-    st.link_button("Logging Sheet","https://docs.google.com/spreadsheets/d/12aXiQaNwGc0lGcMVU-gu18zWZClgI-FNx0RuSCTF_28/edit?gid=1925851779#gid=1925851779")
+    st.link_button(
+        "Directly Access Logging Sheet",
+        "https://docs.google.com/spreadsheets/d/12aXiQaNwGc0lGcMVU-gu18zWZClgI-FNx0RuSCTF_28/edit?gid=1925851779#gid=1925851779",
+    use_container_width=True
+    )
 
     st.markdown("---")
     st.subheader("Active Equipment")
