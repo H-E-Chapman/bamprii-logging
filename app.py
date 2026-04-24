@@ -105,6 +105,8 @@ with st.sidebar:
         _reset_fields(groups, logger)
         st.rerun()
 
+    st.markdown("[Logging Sheet](https://docs.google.com/spreadsheets/d/12aXiQaNwGc0lGcMVU-gu18zWZClgI-FNx0RuSCTF_28/edit?gid=1925851779#gid=1925851779)")
+
     st.markdown("---")
     st.subheader("Active Equipment")
     st.caption("Toggle which variable sets are relevant for this session.")
