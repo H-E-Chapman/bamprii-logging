@@ -18,6 +18,7 @@ from sheets import get_sheet_logger
 from utility import format_counter
 from tab_log import render_log_tab,_load_last_values,_handle_log_run,_reset_fields
 from tab_plot import render_plot_tab
+from tab_DoE import render_doe_tab
 from tab_calc import render_calc_tab
 
 # ── Page setup ────────────────────────────────────────────────────────────────
