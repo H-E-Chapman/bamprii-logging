@@ -47,7 +47,7 @@ groups:
         help: "Free text entry. Add notes on the run here"
         required: false
       - name: Flat ID
-        type: float
+        type: integer
         default: 0
         help: "ID for the flat associated for this file. Use 0 if no flat is relevant"
         
@@ -148,6 +148,16 @@ groups:
         type: select
         options: [White, Pink, Monochromatic]
         default: 0
+        help: ""
+      - name: Undulator
+        type: select
+        options: [u32, other]
+        default:
+        help: ""
+      - name: Camera
+        type: select
+        options: [Photron, Shimadzu]
+        default:
         help: ""
       - name: Exposure time (us)
         type: float
