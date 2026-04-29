@@ -148,13 +148,15 @@ with st.sidebar:
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
-tab_log, tab_plot, tab_calc = st.tabs(["📋 Log Scan", "📈 Plot Results", "🧮 Calculators"])
-
+tab_log, tab_plot, tab_DoE, tab_calc = st.tabs(["📋 Log Scan", "📈 Plot Results", "🔬 Experiment Design", "🧮 Calculators"])
 with tab_log:
     render_log_tab(logger, active_groups, groups)
 
 with tab_plot:
     render_plot_tab(logger, groups, config)
+
+with tab_DoE:
+    render_doe_tab()
 
 with tab_calc:
     render_calc_tab()
