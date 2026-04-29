@@ -46,6 +46,10 @@ groups:
         default: ""
         help: "Free text entry. Add notes on the run here"
         required: false
+      - name: Flat ID
+        type: float
+        default: 0
+        help: "ID for the flat associated for this file. Use 0 if no flat is relevant"
         
   - name: Sample
     always_on: true
@@ -140,6 +144,11 @@ groups:
         type: float
         default: 0
         help: ""
+      - name: Beam type
+        type: select
+        options: [White, Pink, Monochromatic]
+        default: 0
+        help: ""
       - name: Exposure time (us)
         type: float
         default: 0
@@ -149,6 +158,10 @@ groups:
         default: 0
         help: ""
       - name: Pixel Size (um)
+        type: float
+        default: 0
+        help: ""
+      - name: Propogation distance (m)
         type: float
         default: 0
         help: ""
