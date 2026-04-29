@@ -2,7 +2,7 @@
 tab_DoE.py — Renders the Experimental Design tab.
 
 Three fully-functional sections:
-  1. Comparative  — power analysis for t-test / one-way ANOVA, run table
+  1. Comparative  — compare two conditions and calculate their significance
   2. Screening    — Plackett-Burman (N=8/12) and 2^(k-p) fractional factorials
   3. Response Surface — Full Factorial (configurable levels + centroid),
                         CCD (CCC/CCF/CCI with correct NIST alpha), Box-Behnken
@@ -22,7 +22,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats as scipy_stats
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Shared constants
@@ -45,8 +47,8 @@ OBJECTIVE_INFO = {
     "Comparative": (
         "**Comparative** objectives test whether changing a discrete factor "
         "(e.g. material, nozzle type, operator) produces a statistically "
-        "significant change in a response. The output is a sample-size / "
-        "power estimate and a balanced run schedule."
+        "significant change in a response. The output is a comparison of result "
+        "values for two sets of conditions, and their significance."
     ),
     "Screening": (
         "**Screening** objectives identify *which* factors from a large "
@@ -208,245 +210,217 @@ def _render_objective_selector() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _render_comparative_section() -> None:
-    st.subheader("② Comparative Experiment Design")
-    st.write("Section under maintenance")
-"""
-    st.caption(
-        "Design experiments using either classical power analysis or "
-        "precision-based (confidence interval) sizing."
-    )
+    st.subheader("② Comparative Experiment")
+    st.caption("Enter measured values for each condition to compare their means and variability.")
 
-    # ── Test type ─────────────────────────────────────────────────────────────
+    # ── Labels ────────────────────────────────────────────────────────────────
     with st.container(border=True):
-        st.markdown("**Test type**")
-        c1, c2 = st.columns([1, 2])
-
+        st.markdown("**Labels**")
+        c1, c2, c3 = st.columns(3)
         with c1:
-            test_type = st.radio(
-                "Test type",
-                ["Two-sample t-test (2 groups)", "One-way ANOVA (3+ groups)"],
-                key="comp_test_type",
-                label_visibility="collapsed",
-            )
-
+            response_label = st.text_input("Response variable", value="Melt pool depth (mm)", key="comp_response")
         with c2:
-            st.info(
-                "You can size experiments either via hypothesis power "
-                "(detecting differences) or via estimation precision "
-                "(how tightly you can measure effects)."
-            )
+            label_a = st.text_input("Condition A label", value="Condition A", key="comp_label_a")
+        with c3:
+            label_b = st.text_input("Condition B label", value="Condition B", key="comp_label_b")
 
-    # ── Mode selector ─────────────────────────────────────────────────────────
+    # ── Data entry ────────────────────────────────────────────────────────────
     with st.container(border=True):
-        st.markdown("**Design sizing mode**")
+        st.markdown("**Data entry**")
+        st.caption("Enter one value per row. Rows with no values are ignored.")
 
-        mode = st.radio(
-            "Mode",
-            [
-                "Balanced (recommended)",
-                "Conservative (high power)",
-                "Exploratory (screening)"
+        n_rows = int(st.number_input(
+            "Number of rows", min_value=2, max_value=50,
+            value=8, step=1, key="comp_nrows"
+        ))
+
+        default_df = pd.DataFrame({
+            label_a: [None] * n_rows,
+            label_b: [None] * n_rows,
+        })
+
+        edited = st.data_editor(
+            default_df,
+            use_container_width=True,
+            num_rows="fixed",
+            key="comp_table",
+            column_config={
+                label_a: st.column_config.NumberColumn(label_a, format="%.4f"),
+                label_b: st.column_config.NumberColumn(label_b, format="%.4f"),
+            },
+        )
+
+    # ── Extract valid values ──────────────────────────────────────────────────
+    vals_a = edited[label_a].dropna().astype(float).tolist()
+    vals_b = edited[label_b].dropna().astype(float).tolist()
+
+    if len(vals_a) < 2 and len(vals_b) < 2:
+        st.info("Enter at least 2 values in one condition to see results.")
+        return
+
+    # ── Summary stats ─────────────────────────────────────────────────────────
+    def _stats(vals):
+        arr = np.array(vals)
+        return {
+            "n":    len(arr),
+            "mean": float(np.mean(arr))                          if len(arr) >= 1 else None,
+            "std":  float(np.std(arr, ddof=1))                   if len(arr) >= 2 else 0.0,
+            "se":   float(np.std(arr, ddof=1) / np.sqrt(len(arr))) if len(arr) >= 2 else 0.0,
+        }
+
+    sa, sb = _stats(vals_a), _stats(vals_b)
+
+    def _fmt(v, decimals=4):
+        return f"{v:.{decimals}f}" if v is not None else "—"
+
+    with st.container(border=True):
+        st.markdown("**Summary statistics**")
+        col1, col2, col3 = st.columns(3)
+
+        for col, label, s in [(col1, label_a, sa), (col2, label_b, sb)]:
+            with col:
+                st.markdown(f"**{label}**")
+                st.metric("n",    s["n"])
+                st.metric("Mean", _fmt(s["mean"]))
+                st.metric("SD",   _fmt(s["std"]))
+                st.metric("SE",   _fmt(s["se"]))
+
+        with col3:
+            if sa["mean"] is not None and sb["mean"] is not None:
+                delta = sb["mean"] - sa["mean"]
+                pct   = (delta / sa["mean"] * 100) if sa["mean"] != 0 else None
+                st.markdown("**Difference (B − A)**")
+                st.metric("Δ mean", _fmt(delta))
+                if pct is not None:
+                    st.metric("Δ %", f"{pct:+.2f}%")
+
+    # ── Plot ──────────────────────────────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**Condition comparison**")
+
+        error_type = st.radio(
+            "Error bars show",
+            ["Standard deviation (SD)", "Standard error (SE)"],
+            horizontal=True,
+            key="comp_error_type",
+        )
+
+        colors = ["#4C72B0", "#DD8452"]
+        rng = np.random.default_rng(42)
+
+        # Build subplot: bar chart (left) + strip plot (right)
+        fig = make_subplots(
+            rows=1, cols=2,
+            column_widths=[0.55, 0.45],
+            subplot_titles=[
+                f"Mean ± {error_type.split()[0]}",
+                "Data distribution",
             ],
-            key="comp_mode",
         )
 
-        mode_params = {
-            "Balanced (recommended)": {"power": 0.80, "effect_scale": 1.0},
-            "Conservative (high power)": {"power": 0.95, "effect_scale": 0.75},
-            "Exploratory (screening)": {"power": 0.70, "effect_scale": 1.25},
-        }[mode]
+        all_data = [
+            (label_a, sa, vals_a),
+            (label_b, sb, vals_b),
+        ]
 
-    # ── Groups ────────────────────────────────────────────────────────────────
-    with st.container(border=True):
-        st.markdown("**Groups / conditions**")
+        for i, (label, s, vals) in enumerate(all_data):
+            if s["mean"] is None:
+                continue
 
-        n_groups = 2 if "t-test" in test_type else int(
-            st.number_input("Number of groups", min_value=3, max_value=10,
-                            value=3, step=1, key="comp_n_groups")
+            err = s["std"] if "SD" in error_type else s["se"]
+
+            # ── Left: bar + error bar ──────────────────────────────────────
+            fig.add_trace(go.Bar(
+                x=[label],
+                y=[s["mean"]],
+                error_y=dict(
+                    type="data", array=[err],
+                    visible=True,
+                    color="black",
+                    thickness=1.5,
+                    width=8,
+                ),
+                marker_color=colors[i],
+                opacity=0.8,
+                name=label,
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{label}</b><br>"
+                    f"Mean: {s['mean']:.4f}<br>"
+                    f"±{error_type.split()[0]}: {err:.4f}<br>"
+                    f"n = {s['n']}"
+                    "<extra></extra>"
+                ),
+            ), row=1, col=1)
+
+            # ── Right: strip plot with jitter ─────────────────────────────
+            if vals:
+                jitter = rng.uniform(-0.15, 0.15, len(vals))
+                fig.add_trace(go.Box(
+                    x=[label] * len(vals),
+                    y=vals,
+                    name=label,
+                    marker_color=colors[i],
+                    boxpoints="all",
+                    jitter=0.4,
+                    pointpos=0,
+                    line=dict(color=colors[i]),
+                    fillcolor=f"rgba({int(colors[i][1:3], 16)}, "
+                               f"{int(colors[i][3:5], 16)}, "
+                               f"{int(colors[i][5:7], 16)}, 0.2)",
+                    showlegend=False,
+                    hovertemplate="%{y:.4f}<extra></extra>",
+                ), row=1, col=2)
+
+        fig.update_layout(
+            height=440,
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            bargap=0.45,
+            margin=dict(t=50, b=40, l=40, r=20),
         )
-
-        factor_label = st.text_input(
-            "Factor name", value="Material", key="comp_factor_name"
+        fig.update_yaxes(
+            title_text=response_label, row=1, col=1,
+            showgrid=True, gridcolor="rgba(128,128,128,0.15)",
         )
-        response_label = st.text_input(
-            "Response variable", value="Bead width (mm)",
-            key="comp_response_name"
+        fig.update_yaxes(
+            title_text=response_label, row=1, col=2,
+            showgrid=True, gridcolor="rgba(128,128,128,0.15)",
         )
+        fig.update_xaxes(showgrid=False)
 
-        group_names = []
-        cols = st.columns(min(n_groups, 5))
-        for i in range(n_groups):
-            with cols[i % 5]:
-                g = st.text_input(
-                    f"Group {i+1}",
-                    value=f"Group {chr(65+i)}",
-                    key=f"comp_group_{i}",
-                )
-                group_names.append(g)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ── Effect size inputs ────────────────────────────────────────────────────
-    with st.container(border=True):
-        st.markdown("**Effect / variability assumptions**")
+    # ── Welch's t-test ────────────────────────────────────────────────────────
+    if len(vals_a) >= 2 and len(vals_b) >= 2:
+        with st.container(border=True):
+            st.markdown("**Welch's t-test**")
 
-        col1, col2 = st.columns(2)
+            t_stat, p_val = scipy_stats.ttest_ind(vals_a, vals_b, equal_var=False)
 
-        with col1:
-            if "t-test" in test_type:
-                effect = st.number_input(
-                    "Effect size (Cohen's d)",
-                    min_value=0.05, max_value=5.0,
-                    value=0.8 * mode_params["effect_scale"],
-                    step=0.05,
-                    format="%.2f",
-                    key="comp_effect_d",
-                )
-            else:
-                effect = st.number_input(
-                    "Effect size (Cohen's f)",
-                    min_value=0.05, max_value=2.0,
-                    value=0.25 * mode_params["effect_scale"],
-                    step=0.05,
-                    format="%.2f",
-                    key="comp_effect_f",
-                )
-
-        with col2:
-            alpha = st.selectbox(
+            alpha_thresh = st.selectbox(
                 "Significance level (α)",
                 [0.01, 0.05, 0.10],
                 index=1,
                 format_func=lambda x: f"{x:.2f}",
-                key="comp_alpha",
+                key="comp_ttest_alpha",
             )
 
-        power_target = mode_params["power"]
+            c1, c2, c3 = st.columns(3)
+            c1.metric("t-statistic",  f"{t_stat:.4f}")
+            c2.metric("p-value",      f"{p_val:.4f}")
+            c3.metric("Significant?", "Yes ✓" if p_val < alpha_thresh else "No ✗")
 
-        st.caption(
-            f"Mode sets power target to **{power_target:.0%}**. "
-            "Switch mode to adjust conservativeness."
-        )
-
-    # ── Precision-based alternative metric ────────────────────────────────────
-    with st.container(border=True):
-        st.markdown("**Alternative design metric (recommended for DOE)**")
-
-        sigma_est = st.number_input(
-            "Estimated process standard deviation (σ)",
-            min_value=0.0001,
-            value=1.0,
-            step=0.1,
-            key="comp_sigma",
-        )
-
-        ci_width = st.number_input(
-            "Desired confidence interval half-width",
-            min_value=0.0001,
-            value=0.5,
-            step=0.1,
-            key="comp_ci_width",
-        )
-
-        z = 1.96 if alpha == 0.05 else 2.58 if alpha == 0.01 else 1.64
-
-        # CI-based sample size per group
-        n_ci = (z * sigma_est / ci_width) ** 2
-        n_ci = max(2, math.ceil(n_ci))
-
-        st.metric("Required n (precision-based)", n_ci)
-
-        st.caption(
-            "This controls *estimation accuracy* instead of hypothesis power. "
-            "Often more meaningful for engineering experiments."
-        )
-
-    # ── Classical power-based sizing ──────────────────────────────────────────
-    with st.container(border=True):
-        st.markdown("**Classical power-based sizing**")
-
-        if "t-test" in test_type:
-            n_power = _ttest_n_per_group(effect, alpha, power_target)
-        else:
-            n_power = _anova_n_per_group(effect, n_groups, alpha, power_target)
-
-        # cap runaway values for usability
-        n_power_capped = min(n_power, 200)
-
-        st.metric("Required n (power-based)", n_power_capped)
-
-        if n_power > 200:
-            st.warning(
-                "Power-based estimate is very large. "
-                "Consider exploratory mode or larger effect size assumption."
-            )
-
-    # ── Final recommendation ─────────────────────────────────────────────────
-    with st.container(border=True):
-        st.markdown("**Recommended design range**")
-
-        n_final = int(max(n_ci, n_power_capped))
-        n_final = min(n_final, 200)
-
-        n_low = max(2, int(0.7 * n_final))
-        n_high = int(1.3 * n_final)
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Recommended minimum", n_low)
-        c2.metric("Recommended per group", n_final)
-        c3.metric("Recommended maximum", n_high)
-
-        st.caption(
-            "Use this range for practical DOE planning. "
-            "Lower bound = risk-tolerant screening, "
-            "upper bound = high-confidence inference."
-        )
-    # ── Run table generation ──────────────────────────────────────────────────
-    st.markdown("---")
-    st.subheader("③ Randomised Run Schedule")
-
-    extra = int(st.number_input(
-        "Additional replicates per group",
-        min_value=0, max_value=20, value=0, step=1,
-        key="comp_extra",
-    ))
-
-    n_final_design = n_final + extra
-
-    seed = int(st.number_input(
-        "Random seed", min_value=0, max_value=9999,
-        value=42, step=1, key="comp_seed"
-    ))
-
-    rows = []
-    for g in group_names:
-        for rep in range(1, n_final_design + 1):
-            rows.append({
-                factor_label: g,
-                "Replicate": rep,
-                response_label: ""
-            })
-
-    df = pd.DataFrame(rows)
-    df.insert(0, "Std Order", range(1, len(df) + 1))
-
-    rng = random.Random(seed)
-    order = list(range(1, len(df) + 1))
-    rng.shuffle(order)
-
-    df.insert(1, "Run Order", order)
-    df = df.sort_values("Run Order").reset_index(drop=True)
-
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-    csv = io.StringIO()
-    df.to_csv(csv, index=False)
-
-    st.download_button(
-        "Download run schedule",
-        data=csv.getvalue().encode(),
-        file_name="comparative_design.csv",
-        mime="text/csv",
-    )
-"""
+            if p_val < alpha_thresh:
+                st.success(
+                    f"p = {p_val:.4f} < α = {alpha_thresh:.2f}: "
+                    "the means are statistically distinguishable."
+                )
+            else:
+                st.warning(
+                    f"p = {p_val:.4f} ≥ α = {alpha_thresh:.2f}: "
+                    "insufficient evidence to distinguish the means."
+                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
