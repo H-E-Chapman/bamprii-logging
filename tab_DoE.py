@@ -241,7 +241,7 @@ def _render_comparative_section() -> None:
 
         edited = st.data_editor(
             default_df,
-            use_container_width=True,
+            width="stretch",
             num_rows="fixed",
             key="comp_table",
             column_config={
@@ -389,7 +389,7 @@ def _render_comparative_section() -> None:
         )
         fig.update_xaxes(showgrid=False)
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # ── Welch's t-test ────────────────────────────────────────────────────────
     if len(vals_a) >= 2 and len(vals_b) >= 2:
@@ -516,7 +516,7 @@ def _render_screening_section() -> None:
     df_out.insert(1, "Run Order", run_order)
     df_display = df_out.sort_values("Run Order").reset_index(drop=True)
 
-    st.dataframe(df_display, hide_index=True, use_container_width=True)
+    st.dataframe(df_display, hide_index=True, width="stretch")
     st.caption(f"**{n} runs**, {k} factors.")
 
     csv_buf = io.StringIO()
@@ -533,7 +533,7 @@ def _render_screening_section() -> None:
         df_coded_disp = df_coded.copy()
         df_coded_disp.columns = factor_names
         df_coded_disp.insert(0, "Std Order", range(1, n + 1))
-        st.dataframe(df_coded_disp, hide_index=True, use_container_width=True)
+        st.dataframe(df_coded_disp, hide_index=True, width="stretch")
         st.caption(
             "−1 = low level, +1 = high level, 0 = centre (Plackett-Burman only at "
             "the dummy/foldover column level)."
@@ -1317,7 +1317,7 @@ def _plot_2d(df, fnames, labels, title=""):
                       template="plotly_white",
                       legend=dict(orientation="h", y=-0.18),
                       margin=dict(l=20,r=20,t=40,b=60), title="")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _plot_3d(df, fnames, labels, title=""):
@@ -1343,7 +1343,7 @@ def _plot_3d(df, fnames, labels, title=""):
         legend=dict(orientation="h", y=-0.05),
         margin=dict(l=0,r=0,t=40,b=0), title="",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _render_rsm_run_table(
@@ -1371,7 +1371,7 @@ def _render_rsm_run_table(
     df.insert(1, "Run Order", run_order)
     df_disp = df.sort_values("Run Order").reset_index(drop=True)
 
-    st.dataframe(df_disp, hide_index=True, use_container_width=True)
+    st.dataframe(df_disp, hide_index=True, width="stretch")
 
     pt_counts = {}
     for l in point_labels:
