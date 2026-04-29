@@ -149,10 +149,14 @@ groups:
         options: [White, Pink, Monochromatic]
         default: 0
         help: ""
-      - name: Undulator
+      - name: Insertion Device
         type: select
         options: [u32, other]
         default:
+        help: ""
+      - name: Undulator gap
+        type: float
+        default: 0
         help: ""
       - name: Camera
         type: select
@@ -171,7 +175,7 @@ groups:
         type: float
         default: 0
         help: ""
-      - name: Propogation distance (m)
+      - name: Propagation distance (m)
         type: float
         default: 0
         help: ""
