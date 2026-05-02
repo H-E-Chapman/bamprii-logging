@@ -165,8 +165,9 @@ def _render_filter_panel(df: pd.DataFrame, filterable: list, config: dict) -> pd
                     key=key
                 )
                 if selected:
-                    df_filtered = df_filtered[df_filtered[col].isin(selected)]
-
+                    df_filtered = df_filtered[
+                        df_filtered[col].isin(selected) | df_filtered[col].isna()
+                        ]
         if "Timestamp" in df.columns:
             df_filtered["Timestamp"] = pd.to_datetime(df_filtered["Timestamp"], errors="coerce")
             valid_dates = df_filtered["Timestamp"].dropna()
