@@ -10,6 +10,56 @@ import plotly.graph_objects as go
 from config import get_filterable_col_names
 from sheets import SheetLogger
 
+# ── Derived quantity definitions ──────────────────────────────────────────────
+
+_COL_POWER   = "Laser Processing Parameters: Laser Power (W)"
+_COL_SPEED   = "Laser Processing Parameters: Scan Speed (mm/s)"
+_COL_SPOT    = "Laser Processing Parameters: Laser Spot Size (mm)"
+_COL_FEED    = "Powder delivery: Feed rate (rpm)"
+
+DERIVED_COLS = {
+    "Derived: Linear Energy Density (J/mm)": {
+        "formula": "Power / Speed",
+        "requires": [_COL_POWER, _COL_SPEED],
+        "compute": lambda df: df[_COL_POWER] / df[_COL_SPEED],
+    },
+    "Derived: Specific Energy Density (J/mm²)": {
+        "formula": "Power / (Speed × Spot Size)",
+        "requires": [_COL_POWER, _COL_SPEED, _COL_SPOT],
+        "compute": lambda df: df[_COL_POWER] / (df[_COL_SPEED] * df[_COL_SPOT]),
+    },
+    "Derived: Powder Delivery Ratio (rpm·s/mm)": {
+        "formula": "Feed Rate / Speed  ⚠️ uncalibrated — proportional to g/mm only",
+        "requires": [_COL_FEED, _COL_SPEED],
+        "compute": lambda df: (
+            pd.to_numeric(df[_COL_FEED],  errors="coerce").replace(0, pd.NA) /
+            pd.to_numeric(df[_COL_SPEED], errors="coerce").replace(0, pd.NA)
+        ),
+    },
+}
+
+_COL_POWDER_MAT = "Sample: Powder material"
+
+
+def _compute_derived_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Append standard derived quantity columns to *df* where required source
+    columns are present.  Returns the augmented DataFrame and names added.
+    """
+    added: list[str] = []
+    for col_name, spec in DERIVED_COLS.items():
+        if not all(r in df.columns for r in spec["requires"]):
+            continue
+        try:
+            series = spec["compute"](df.copy())
+            series = series.replace([float("inf"), float("-inf")], pd.NA)
+            df[col_name] = pd.to_numeric(series, errors="coerce")
+            added.append(col_name)
+        except Exception:
+            pass
+    return df, added
+
+
 
 def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
     st.title("Experiment visualisation")
@@ -31,14 +81,15 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
         st.info("No data logged yet — come back once you have some runs.")
         return
 
+    # ── Standard derived quantities ───────────────────────────────────────────
+    df, derived_added = _compute_derived_columns(df)
+
     with col_info:
         st.caption(f"Loaded **{len(df)}** runs. Press refresh to pull latest data from the sheet.")
 
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
     all_cols = df.columns.tolist()
 
-    if len(numeric_cols) < 2:
+    if len(df.select_dtypes(include="number").columns) < 2:
         st.warning("Need at least 2 numeric columns to plot. Log more runs with numeric fields.")
         return
 
@@ -49,7 +100,7 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
     if filterable_col_names:
         filterable = [c for c in filterable_col_names if c in df.columns and 1 < df[c].nunique() <= 30]
     else:
-        filterable = [c for c in categorical_cols if 1 < df[c].nunique() <= 30]
+        filterable = [c for c in df.select_dtypes(exclude="number").columns if 1 < df[c].nunique() <= 30]
 
     df_filtered = _render_filter_panel(df, filterable, config)
 
@@ -58,7 +109,30 @@ def render_plot_tab(logger: SheetLogger, groups: list, config: dict) -> None:
     st.markdown("---")
     st.subheader("Axis Configuration")
 
+    # ── Derived quantities expander ───────────────────────────────────────────
+    with st.expander("🧮 Derived quantity definitions", expanded=False):
+
+        # ── Standard formula list ─────────────────────────────────────────────
+        for dc in derived_added:
+            spec = DERIVED_COLS[dc]
+            short = dc.split(": ", 1)[-1]
+            st.markdown(f"**{short}** = `{spec['formula']}`")
+
+        st.markdown("---")
+        st.caption(
+            "⚠️ **Powder Delivery Ratio** is uncalibrated (rpm·s/mm). "
+            "It is proportional to g/mm but requires a density and feeder "
+            "calibration factor to convert to absolute units."
+        )
+
+    # ── Build plottable columns list ──────────────────────────────────────────
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+
     plottable_cols = [c for c in filterable_col_names if c in df.columns and c in numeric_cols]
+    for dc in derived_added:
+        if dc not in plottable_cols:
+            plottable_cols.append(dc)
+
     _apply_plot_defaults(plottable_cols, filterable_col_names, df, config)
 
     sel_cols = st.columns(3)
