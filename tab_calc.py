@@ -386,6 +386,7 @@ def _plan(groups: pd.DataFrame, scan_s: float, switch_s: float, margin: float) -
     df = df[(df[_PLAN_COLUMNS[1:]] > 0).all(axis=1)].reset_index(drop=True)
     df["Group"] = df["Group"].fillna("").astype(str)
     df["Scans per substrate"] = df["Tracks per substrate"] * df["Layers per track"]
+    df["Tracks"] = df["Tracks per substrate"] * df["Substrates"]
     df["Scans"] = df["Scans per substrate"] * df["Substrates"]
     df["Per substrate (s)"] = (df["Scans per substrate"] * scan_s + switch_s) * (1 + margin)
     df["Total (s)"] = df["Per substrate (s)"] * df["Substrates"]
@@ -477,8 +478,9 @@ def _render_time_planner() -> None:
     n_fit = int(fits.sum())
 
     st.markdown("---")
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m0, m2, m3, m4 = st.columns(5)
     m1.metric("Substrates planned", int(plan["Substrates"].sum()), help=f"{int(plan['Scans'].sum())} scans in total.")
+    m0.metric("Tracks (conditions)", int(plan["Tracks"].sum()), help="One parameter set per track: substrates × tracks per substrate.")
     m2.metric("Time needed", _fmt_duration(planned_s),
               help=f"Substrates {_fmt_duration(substrates_s)} (with the {margin_pct}% margin) "
                    f"+ overheads {_fmt_duration(overhead_s)}.")
@@ -502,7 +504,7 @@ def _render_time_planner() -> None:
             "Cumulative": plan["Cumulative (s)"].map(_fmt_duration),
             "Fits": fits.map({True: "✅", False: "❌"}),
         }
-    )[["Group", "Substrates", "Tracks per substrate", "Layers per track", "Scans per substrate",
+    )[["Group", "Substrates", "Tracks per substrate", "Layers per track", "Tracks", "Scans per substrate",
        "Scans", "Per substrate", "Group total", "Cumulative", "Fits"]]
     st.dataframe(table, hide_index=True, width="stretch")
     st.dataframe(

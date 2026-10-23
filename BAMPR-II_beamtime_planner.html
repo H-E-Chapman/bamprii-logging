@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BAMPR-II Beamtime Planner</title>
+<style>
+/* Layout: inputs on top (group table, then three parameter panels), results below (tiles, two tables). */
+:root {
+  --bg: #f9f9f7; --surface: #fcfcfb; --fg: #0b0b0b; --fg-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --ring: rgba(11,11,11,0.12); --accent: #2a78d6; --ok: #006300; --bad: #d03b3b;
+  --ok-bg: #e7f3e7; --bad-bg: #fbe9e9; --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d; --surface: #1a1a19; --fg: #f0efec; --fg-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --ring: rgba(255,255,255,0.12); --accent: #3987e5; --ok: #0ca30c; --bad: #e66767;
+    --ok-bg: #16301a; --bad-bg: #3a1c1c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0d; --surface: #1a1a19; --fg: #f0efec; --fg-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --ring: rgba(255,255,255,0.12); --accent: #3987e5; --ok: #0ca30c; --bad: #e66767;
+  --ok-bg: #16301a; --bad-bg: #3a1c1c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px; }
+main { max-width: 1100px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
+.sub { color: var(--fg-2); margin: 4px 0 0; max-width: 70ch; }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 6px; padding: 14px; min-width: 0; }
+.params { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+label.f { display: grid; gap: 3px; margin-bottom: 10px; font-size: 12.5px; color: var(--fg-2); }
+label.f span.l { display: flex; align-items: center; gap: 6px; }
+input[type=number], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--ring); border-radius: 4px; padding: 6px 8px; width: 100%; font-variant-numeric: tabular-nums; }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.info { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-weight: 700; cursor: help; position: relative; }
+.info:hover::after, .info:focus::after { content: attr(data-tip); position: absolute; left: 20px; top: -6px; z-index: 5; width: 280px; white-space: normal; background: var(--fg); color: var(--bg); padding: 8px 10px; border-radius: 5px; font-size: 12px; font-weight: 400; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+#groups input[type=number] { width: 7em; text-align: right; }
+#groups input[type=text] { min-width: 10em; }
+button { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--ring); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--fg-2); }
+button.x { padding: 2px 8px; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.tile .v { font-size: 22px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 12px; color: var(--fg-2); }
+.verdict { border-radius: 6px; padding: 10px 14px; font-weight: 500; }
+.verdict.ok { background: var(--ok-bg); color: var(--ok); }
+.verdict.bad { background: var(--bad-bg); color: var(--bad); }
+.results { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .results { grid-template-columns: 1fr; } }
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.fit-y { color: var(--ok); font-weight: 600; } .fit-n { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>BAMPR-II Beamtime Planner</h1>
+    <p class="sub">Does a campaign of substrate groups fit the available beamtime? Each group has its own substrate count, tracks per substrate and layers per track. Every scan (one layer of one track) is costed at a flat time that includes its overhead. Hover the ⓘ marks for the MA-7161 reference figures.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Substrate groups</h2>
+    <div class="tablewrap">
+      <table id="groups">
+        <thead><tr><th>Group</th><th class="n">Substrates</th><th class="n">Tracks per substrate</th><th class="n">Layers per track</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p><button id="add" type="button">＋ Add group</button></p>
+    <p class="note">Rows with a blank or zero count are ignored. Order matters: the fit check is cumulative from the top, so put the highest-priority groups first.</p>
+  </section>
+
+  <section class="params">
+    <div class="panel">
+      <h2>Per scan / substrate</h2>
+      <label class="f"><span class="l">Time per scan (s) <i class="info" tabindex="0" data-tip="One layer of one track including repositioning, camera save and logging. For beamtime MA-7161, median time-per-scan was 4:15, with a lower quartile of 2:32, and an upper quartile of 7:19. A sensible time-per-scan default would be 5 minutes.">i</i></span><input type="number" id="scan" value="300" min="0" step="15"></label>
+      <label class="f"><span class="l">Substrate switch-over (min) <i class="info" tabindex="0" data-tip="Open hutch, swap substrate, realign, close and search. For beamtime MA-7161, median switch-over was 13:28, with a lower quartile of 8:50, and an upper quartile of 22:06. A sensible default is 15 minutes.">i</i></span><input type="number" id="switch" value="15" min="0" step="1"></label>
+      <label class="f"><span class="l">Safety margin (%) <i class="info" tabindex="0" data-tip="Added to every substrate for retries, faults and the unexpected. Overheads below are added without a margin.">i</i></span><input type="number" id="margin" value="25" min="0" max="200" step="5"></label>
+    </div>
+    <div class="panel">
+      <h2>Campaign overheads</h2>
+      <label class="f"><span class="l">Initial setup (h) <i class="info" tabindex="0" data-tip="Time from the start of beamtime to the first substrate: alignment, imaging set-up and parameter adjustment. MA-7161 took 11 h 19 min.">i</i></span><input type="number" id="setup" value="0" min="0" step="0.5"></label>
+      <label class="f"><span class="l">Powder changes</span><input type="number" id="npowder" value="0" min="0" step="1"></label>
+      <label class="f"><span class="l">Time per powder change (h) <i class="info" tabindex="0" data-tip="Empty, clean and refill the hopper, then re-establish the feed. Explicit changes in the MA-7161 log took 26 min to 1 h 38 min.">i</i></span><input type="number" id="powderh" value="1" min="0" step="0.25"></label>
+      <label class="f"><span class="l">Major equipment changes <i class="info" tabindex="0" data-tip="Changing equipment like switching between motion controllers, or nozzle tips.">i</i></span><input type="number" id="nequip" value="0" min="0" step="1"></label>
+      <label class="f"><span class="l">Time per equipment change (h) <i class="info" tabindex="0" data-tip="Changing equipment like switching between motion controllers, or nozzle tips. The ultrasonic rig switch-in on MA-7161 took about 4 h 35 min.">i</i></span><input type="number" id="equiph" value="4" min="0" step="0.5"></label>
+    </div>
+    <div class="panel">
+      <h2>Beamtime</h2>
+      <label class="f"><span class="l">Available beamtime (h)</span><input type="number" id="available" value="12" min="0" step="1"></label>
+      <label class="f"><span class="l">Breaks per 24 h (h) <i class="info" tabindex="0" data-tip="4 hours is 1 hour for breakfast and 1½ hours each for lunch and dinner, including handovers. Scaled to the available beamtime.">i</i></span><input type="number" id="breaks" value="4" min="0" max="24" step="0.5"></label>
+    </div>
+  </section>
+
+  <section class="tiles" id="tiles"></section>
+  <div class="verdict" id="verdict"></div>
+
+  <section class="results">
+    <div class="panel"><h2>Substrate groups</h2><div class="tablewrap"><table id="out"></table></div></div>
+    <div class="panel"><h2>Campaign budget</h2><div class="tablewrap"><table id="budget"></table></div></div>
+  </section>
+  <p class="note">Durations are h:mm:ss. Per-substrate time = scans × time per scan + switch-over, plus the margin. Overheads are added once without a margin. "Fits" is cumulative in table order after the overheads.</p>
+</main>
+
+<script>
+const DEFAULT_GROUPS = [["Single tracks", 3, 4, 1], ["Thin walls", 3, 5, 3]];
+const $ = id => document.getElementById(id);
+const fmt = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`; };
+const num = id => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : 0; };
+
+// ---- pure planning function (same arithmetic as the Streamlit tab)
+function plan(groups, p) {
+  const rows = groups
+    .map(g => ({ name: g.name, n: Math.floor(g.n), tracks: Math.floor(g.tracks), layers: Math.floor(g.layers) }))
+    .filter(g => g.n > 0 && g.tracks > 0 && g.layers > 0)
+    .map(g => { const scansPer = g.tracks * g.layers; const per = (scansPer * p.scan + p.switchS) * (1 + p.margin);
+      return { ...g, scansPer, scans: scansPer * g.n, tracksTotal: g.tracks * g.n, per, total: per * g.n }; });
+  let cum = 0; rows.forEach(r => { cum += r.total; r.cum = cum; });
+  const overheads = [["Initial setup", p.setup], [`${p.nPowder} powder change${p.nPowder === 1 ? "" : "s"}`, p.nPowder * p.powder],
+                     [`${p.nEquip} major equipment change${p.nEquip === 1 ? "" : "s"}`, p.nEquip * p.equip]];
+  const overhead = overheads.reduce((a, [, v]) => a + v, 0);
+  const substrates = rows.reduce((a, r) => a + r.total, 0);
+  const breaks = p.available / 86400 * p.breaksPerDay;
+  const usable = Math.max(0, p.available - breaks);
+  const need = substrates + overhead;
+  rows.forEach(r => { r.fits = r.cum + overhead <= usable; });
+  return { rows, overheads, overhead, substrates, need, usable, breaks, surplus: usable - need };
+}
+
+// ---- group table
+function addRow(name = "", n = 0, tracks = 0, layers = 0) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input type="text" value="${name}" placeholder="e.g. material or geometry"></td>
+    <td class="n"><input type="number" min="0" step="1" value="${n}"></td>
+    <td class="n"><input type="number" min="0" step="1" value="${tracks}"></td>
+    <td class="n"><input type="number" min="0" step="1" value="${layers}"></td>
+    <td><button type="button" class="x" title="Remove group">✕</button></td>`;
+  tr.querySelector("button").addEventListener("click", () => { tr.remove(); render(); });
+  tr.querySelectorAll("input").forEach(i => i.addEventListener("input", render));
+  $("groups").querySelector("tbody").appendChild(tr);
+}
+function readGroups() {
+  return [...$("groups").querySelectorAll("tbody tr")].map(tr => {
+    const [name, n, tracks, layers] = [...tr.querySelectorAll("input")].map(i => i.value);
+    return { name: name || "(unnamed)", n: +n || 0, tracks: +tracks || 0, layers: +layers || 0 };
+  });
+}
+
+// ---- render
+function render() {
+  const p = { scan: num("scan"), switchS: num("switch") * 60, margin: num("margin") / 100, setup: num("setup") * 3600,
+              nPowder: Math.floor(num("npowder")), powder: num("powderh") * 3600, nEquip: Math.floor(num("nequip")), equip: num("equiph") * 3600,
+              available: num("available") * 3600, breaksPerDay: num("breaks") * 3600 };
+  const r = plan(readGroups(), p);
+  const nSub = r.rows.reduce((a, x) => a + x.n, 0), nScans = r.rows.reduce((a, x) => a + x.scans, 0), nTracks = r.rows.reduce((a, x) => a + x.tracksTotal, 0);
+  $("tiles").innerHTML = [
+    ["Substrates planned", nSub, `${nScans} scans in total`],
+    ["Tracks (conditions)", nTracks, "one parameter set per track"],
+    ["Time needed", fmt(r.need), `substrates ${fmt(r.substrates)} + overheads ${fmt(r.overhead)}`],
+    ["Usable beamtime", fmt(r.usable), `${fmt(r.breaks)} of breaks removed`],
+    [r.surplus >= 0 ? "Surplus" : "Shortfall", fmt(Math.abs(r.surplus)), r.surplus >= 0 ? "left after every planned substrate" : "beyond the usable time"],
+  ].map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+  const v = $("verdict");
+  if (!r.rows.length) { v.className = "verdict bad"; v.textContent = "Add at least one group with substrates, tracks and layers above zero."; }
+  else if (r.surplus >= 0) { const last = r.rows[r.rows.length - 1]; const extra = last.per ? Math.floor(r.surplus / last.per) : 0;
+    v.className = "verdict ok"; v.textContent = `The plan fits. The surplus covers about ${extra} more substrate${extra === 1 ? "" : "s"} of "${last.name}".`; }
+  else { const nFit = r.rows.filter(x => x.fits).length;
+    v.className = "verdict bad"; v.textContent = `The plan does not fit: ${nFit} of ${r.rows.length} groups complete in table order. Reduce counts, trim the time per scan, or reorder the groups by priority.`; }
+  $("out").innerHTML = `<thead><tr><th>Group</th><th class="n">Substrates</th><th class="n">Tracks</th><th class="n">Scans / substrate</th><th class="n">Scans</th><th class="n">Per substrate</th><th class="n">Group total</th><th class="n">Cumulative</th><th>Fits</th></tr></thead><tbody>` +
+    r.rows.map(x => `<tr><td>${x.name}</td><td class="n">${x.n}</td><td class="n">${x.tracksTotal}</td><td class="n">${x.scansPer}</td><td class="n">${x.scans}</td><td class="n">${fmt(x.per)}</td><td class="n">${fmt(x.total)}</td><td class="n">${fmt(x.cum)}</td><td class="${x.fits ? "fit-y" : "fit-n"}">${x.fits ? "✓ yes" : "✗ no"}</td></tr>`).join("") + `</tbody>`;
+  $("budget").innerHTML = `<thead><tr><th>Item</th><th class="n">Time</th></tr></thead><tbody>` +
+    r.overheads.map(([k, s]) => `<tr><td>${k}</td><td class="n">${fmt(s)}</td></tr>`).join("") +
+    `<tr><td>Overheads total</td><td class="n">${fmt(r.overhead)}</td></tr><tr><td>Substrates (with margin)</td><td class="n">${fmt(r.substrates)}</td></tr><tr><td><b>Time needed</b></td><td class="n"><b>${fmt(r.need)}</b></td></tr><tr><td>Usable beamtime</td><td class="n">${fmt(r.usable)}</td></tr></tbody>`;
+}
+
+DEFAULT_GROUPS.forEach(g => addRow(...g));
+$("add").addEventListener("click", () => { addRow(); render(); });
+document.querySelectorAll(".params input").forEach(i => i.addEventListener("input", render));
+render();
+</script>
+</body>
+</html>
