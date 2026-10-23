@@ -1,5 +1,5 @@
 """
-utility.py — Pure helper functions for auto-increment counter formatting.
+utility.py — Pure helpers for auto-increment counter formatting (no Streamlit dependency).
 """
 
 import re
@@ -13,23 +13,27 @@ def format_counter(n: int, var: dict) -> str:
       - "padded"   → zero-padded integer,  e.g. 0042
       - "prefixed" → prefix + zero-padded, e.g. RUN0042
     """
-    fmt = var.get("format", "padded")
     pad = int(var.get("pad", 4))
-    prefix = var.get("prefix", "")
-    if fmt == "prefixed":
-        return f"{prefix}{str(n).zfill(pad)}"
-    return str(n).zfill(pad)
+    prefix = var.get("prefix", "") if var.get("format", "padded") == "prefixed" else ""
+    return f"{prefix}{str(n).zfill(pad)}"
 
 
-def extract_counter(value: str, var: dict) -> int | None:
+def extract_counter(value, var: dict) -> int | None:
     """
     Parse a counter value back to an integer, stripping any prefix.
-    Returns None if the value cannot be parsed.
+
+    Accepts strings or numbers: Google Sheets returns padded counters such as
+    "0042" as the integer 42. Returns None if the value cannot be parsed.
     """
-    fmt = var.get("format", "padded")
-    prefix = var.get("prefix", "")
-    try:
-        stripped = value.replace(prefix, "") if (fmt == "prefixed" and prefix) else value
-        return int(re.sub(r"[^0-9]", "", stripped))
-    except (ValueError, TypeError):
+    if value is None:
         return None
+    if isinstance(value, float):
+        if value != value or not value.is_integer():  # NaN or fractional
+            return None
+        value = int(value)
+    s = str(value).strip()
+    prefix = var.get("prefix", "")
+    if var.get("format") == "prefixed" and prefix and s.startswith(prefix):
+        s = s[len(prefix):]
+    digits = re.sub(r"[^0-9]", "", s)
+    return int(digits) if digits else None

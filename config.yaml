@@ -1,8 +1,47 @@
+# ── App-wide settings ─────────────────────────────────────────────────────────
+
+# IANA timezone used for the Timestamp column (Streamlit Cloud servers run in UTC).
+timezone: Europe/London
+
 default_plot_x: "Laser Processing Parameters: Scan Speed (mm/s)"
 default_plot_y: "Laser Processing Parameters: Laser Power (W)"
 default_plot_colour: "Sample: Substrate material"
 default_filters:
   "General: Experiment type": ["Weld", "AM"]
+
+# Derived quantities offered in the Plot tab. `inputs` maps a short alias to a
+# sheet column ("Group: Variable"); `formula` is arithmetic over those aliases.
+# Optional `exclude_zero` lists aliases whose zero values make the quantity
+# meaningless; those runs are left out.
+derived:
+  - name: Linear Energy Density (J/mm)
+    formula: power / speed
+    inputs:
+      power: "Laser Processing Parameters: Laser Power (W)"
+      speed: "Laser Processing Parameters: Scan Speed (mm/s)"
+  - name: Specific Energy Density (J/mm²)
+    formula: power / (speed * spot)
+    inputs:
+      power: "Laser Processing Parameters: Laser Power (W)"
+      speed: "Laser Processing Parameters: Scan Speed (mm/s)"
+      spot: "Laser Processing Parameters: Laser Spot Size (mm)"
+  - name: Powder Delivery Ratio (rpm·s/mm)
+    formula: feed / speed
+    inputs:
+      feed: "Powder delivery: Feed rate (rpm)"
+      speed: "Laser Processing Parameters: Scan Speed (mm/s)"
+    exclude_zero: [feed, speed]
+    note: >-
+      Uncalibrated. Proportional to g/mm; needs the feeder calibration factor
+      and powder density (see powder_calibration) for absolute units.
+
+# Defaults for the Powder Delivery Rate calculator.
+powder_calibration:
+  feeder_factor_mm3_per_s_per_rpm: 1.3306   # GTV PF 2/2 LC, from calibration spreadsheet
+  default_powder_density_kg_m3: 2700
+
+# ── Variable groups ───────────────────────────────────────────────────────────
+
 groups:
 
   - name: General
@@ -15,12 +54,10 @@ groups:
         prefix: "RUN"
         pad: 4
         start: 1
-        help: ""
         required: true
       - name: Operator
         type: select
-        options: [HEC,SB,YW,XH]
-        default: ""
+        options: [HEC, SB, YW, XH]
         help: "Current Operator / Shift Leader initials."
         required: true
       - name: Experiment type
@@ -36,21 +73,18 @@ groups:
       - name: Layer number
         type: integer
         default: 0
-        help: ""
       - name: Build location
         type: integer
         default: 0
-        help: ""
       - name: Notes
         type: text
         default: ""
         help: "Free text entry. Add notes on the run here"
-        required: false
       - name: Flat ID
         type: integer
         default: 0
         help: "ID for the flat associated for this file. Use 0 if no flat is relevant"
-        
+
   - name: Sample
     always_on: true
     filterable: true
@@ -58,23 +92,18 @@ groups:
       - name: Substrate ID
         type: text
         default: ""
-        help: ""
       - name: Substrate material
         type: text
         default: ""
-        help: ""
       - name: Powder material
         type: text
         default: ""
-        help: ""
       - name: Powder size distribution (um)
         type: text
         default: ""
-        help: ""
       - name: Sample manipulation
         type: text
         default: "Meca500 6-axis Robotic arm"
-        help: ""
 
   - name: Laser Processing Parameters
     always_on: true
@@ -83,23 +112,18 @@ groups:
       - name: Laser Power (W)
         type: float
         default: 0
-        help: ""
       - name: Scan Speed (mm/s)
         type: float
         default: 0
-        help: ""
       - name: Laser Spot Size (mm)
         type: float
         default: 0
-        help: ""
       - name: Laser
         type: text
         default: "TruFiber 500 P compact (FD44-A)"
-        help: ""
       - name: Optics
         type: text
         default: "Optogama beam reducer"
-        help: ""
 
   - name: Powder delivery
     always_on: true
@@ -108,29 +132,23 @@ groups:
       - name: Feed rate (rpm)
         type: float
         default: 0
-        help: ""
       - name: Shield Gas (lpm)
         type: float
         default: 0
-        help: ""
       - name: Carrier gas (lpm)
         type: float
         default: 0
-        help: ""        
       - name: Powder feeder
         type: text
         default: "GTV PF 2/2 LC"
-        help: ""
       - name: Hopper type
         type: select
         options: [Full Hopper, Mini Hopper]
         default: Full Hopper
-        help: ""
       - name: Nozzle
         type: select
         options: [HighNo 4.0 - 7mm standoff, HighNo 4.0 - 17 degree, Other (add in notes)]
         default: HighNo 4.0 - 7mm standoff
-        help: ""
 
   - name: X-ray beam settings
     always_on: false
@@ -143,49 +161,36 @@ groups:
       - name: Beam Energy (KeV)
         type: float
         default: 0
-        help: ""
       - name: Beam type
         type: select
         options: [White, Pink, Monochromatic]
-        default: 0
-        help: ""
       - name: Insertion Device
         type: select
         options: [u32, other]
-        default:
-        help: ""
       - name: Undulator gap
         type: float
         default: 0
-        help: ""
       - name: Camera
         type: select
         options: [Photron, Shimadzu]
-        default:
-        help: ""
       - name: Exposure time (us)
         type: float
         default: 0
-        help: ""
       - name: Framerate (kfps)
         type: float
         default: 0
-        help: ""
       - name: Pixel Size (um)
         type: float
         default: 0
-        help: ""
       - name: Propagation distance (m)
         type: float
         default: 0
-        help: ""
       - name: X-ray scan number
         type: auto_increment
         format: padded
         pad: 4
         start: 1
-        help: ""
-        
+
   - name: IR Camera Settings
     always_on: false
     variables:
@@ -193,21 +198,17 @@ groups:
         type: select
         options: [Empty, ND2, ND3, Other]
         default: ND2
-        help: ""
       - name: Temperature range (C)
         type: text
         default: ""
-        help: ""
       - name: Framerate (kfps)
         type: float
         default: 0
-        help: ""
       - name: IR scan number
         type: auto_increment
         format: padded
         pad: 4
         start: 1
-        help: ""
 
   - name: Ultrasonic Processing Parameters
     always_on: false
@@ -216,12 +217,9 @@ groups:
       - name: Amplitude (%)
         type: float
         default: 0
-        help: ""
       - name: Frequency (kHz)
         type: float
         default: 35.14
-        help: ""
       - name: Booster
         type: select
         options: [One, Two, None]
-        help: ""

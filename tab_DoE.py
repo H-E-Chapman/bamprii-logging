@@ -1,11 +1,11 @@
 """
 tab_DoE.py — Renders the Experimental Design tab.
 
-Three fully-functional sections:
-  1. Comparative  — compare two conditions and calculate their significance
-  2. Screening    — Plackett-Burman (N=8/12) and 2^(k-p) fractional factorials
-  3. Response Surface — Full Factorial (configurable levels + centroid),
-                        CCD (CCC/CCF/CCI with correct NIST alpha), Box-Behnken
+Three sections, chosen by objective:
+  1. Comparative      — two conditions: summary statistics, plot, Welch's t-test
+  2. Screening        — full 2^k, 2^(k-p) fractional factorials, Plackett-Burman (N=8..20)
+  3. Response Surface — axis sweep, full factorial (per-factor levels + centroid),
+                        CCD (CCC / CCF / CCI), Box-Behnken; 2-D/3-D design plots
 
 NIST reference:
   https://www.itl.nist.gov/div898/handbook/pri/section3/pri336.htm
@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import io
 import itertools
-import math
 import random
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats as scipy_stats
 
@@ -107,58 +105,6 @@ _FF_RESOLUTION_NOTES = {
 # CCD recommended centre replicates (NIST Table 3.24)
 _CCD_NC_REC = {2: 5, 3: 6, 4: 7}
 _BBD_NC_REC = {3: 3, 4: 3}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Power-analysis helpers (no scipy dependency)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _norm_ppf(p: float) -> float:
-    """Rational approximation for standard normal quantile (Abramowitz & Stegun)."""
-    if p <= 0 or p >= 1:
-        return float("nan")
-    sign = 1 if p >= 0.5 else -1
-    q = min(p, 1 - p)
-    t = math.sqrt(-2 * math.log(q))
-    c = (2.515517, 0.802853, 0.010328)
-    d = (1.432788, 0.189269, 0.001308)
-    approx = t - (c[0] + c[1]*t + c[2]*t**2) / (1 + d[0]*t + d[1]*t**2 + d[2]*t**3)
-    return sign * approx
-
-
-def _ttest_n_per_group(effect_size: float, alpha: float, power: float) -> int:
-    """
-    Two-sample two-tailed t-test: minimum n per group.
-    Effect size = Cohen's d = |mu1-mu2| / sigma_pooled.
-    Uses normal approximation (conservative; accurate for n > ~20).
-    """
-    if effect_size <= 0:
-        return 9999
-    z_a = _norm_ppf(1 - alpha / 2)
-    z_b = _norm_ppf(power)
-    n = 2 * ((z_a + z_b) / effect_size) ** 2
-    return max(2, math.ceil(n))
-
-
-def _anova_n_per_group(f_effect: float, k_groups: int, alpha: float, power: float) -> int:
-    """
-    One-way ANOVA: minimum n per group (normal approximation via Cohen's f).
-    Cohen's f = sigma_m / sigma_e  (between-group SD / within-group SD).
-    """
-    if f_effect <= 0 or k_groups < 2:
-        return 9999
-    # Non-centrality parameter: lambda = n * k * f^2
-    # Power ≈ P(chi^2(df1, lambda) > chi^2_crit(df1))
-    # Approximation: n ≈ (z_alpha + z_power)^2 / f^2 / k_groups * (k_groups - 1 + k_groups)
-    # Simpler approximation treating ANOVA as equivalent independent t-tests:
-    df1 = k_groups - 1
-    z_a = _norm_ppf(1 - alpha)          # one-sided F
-    z_b = _norm_ppf(power)
-    # lambda = (z_a + z_b)^2 at minimum power threshold
-    # lambda = n * k_groups * f^2  → n = lambda / (k_groups * f^2)
-    lam = (z_a + z_b) ** 2
-    n = lam / (k_groups * f_effect ** 2) + df1 / k_groups
-    return max(2, math.ceil(n))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -306,7 +252,6 @@ def _render_comparative_section() -> None:
         )
 
         colors = ["#4C72B0", "#DD8452"]
-        rng = np.random.default_rng(42)
 
         # Build subplot: bar chart (left) + strip plot (right)
         fig = make_subplots(
@@ -355,7 +300,6 @@ def _render_comparative_section() -> None:
 
             # ── Right: strip plot with jitter ─────────────────────────────
             if vals:
-                jitter = rng.uniform(-0.15, 0.15, len(vals))
                 fig.add_trace(go.Box(
                     x=[label] * len(vals),
                     y=vals,
@@ -1034,7 +978,7 @@ def _render_factor_editor(k: int) -> dict | None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  RSM design generators  (NIST-correct)
+#  RSM design generators
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _generate_rsm_design(
@@ -1316,7 +1260,7 @@ def _plot_2d(df, fnames, labels, title=""):
     fig.update_layout(xaxis_title=x, yaxis_title=y, height=480,
                       template="plotly_white",
                       legend=dict(orientation="h", y=-0.18),
-                      margin=dict(l=20,r=20,t=40,b=60), title="")
+                      margin=dict(l=20,r=20,t=40,b=60), title=title)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -1341,7 +1285,7 @@ def _plot_3d(df, fnames, labels, title=""):
         scene=dict(xaxis_title=x, yaxis_title=y, zaxis_title=z),
         height=540, template="plotly_white",
         legend=dict(orientation="h", y=-0.05),
-        margin=dict(l=0,r=0,t=40,b=0), title="",
+        margin=dict(l=0,r=0,t=40,b=0), title=title,
     )
     st.plotly_chart(fig, width="stretch")
 

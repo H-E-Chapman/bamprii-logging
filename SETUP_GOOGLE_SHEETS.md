@@ -76,9 +76,9 @@ sheet_id = "YOUR_GOOGLE_SHEET_ID"
 If you want to run the app locally with Sheets access:
 
 1. Create a `.streamlit/` folder in your project directory
-2. Copy `secrets_template.toml` to `.streamlit/secrets.toml`
+2. Create `.streamlit/secrets.toml` containing the TOML block from Step 4
 3. Fill in the values from your JSON credentials file
-4. `.streamlit/secrets.toml` is already in `.gitignore` so it won't be committed
+4. `.streamlit/` is in `.gitignore`, so the secrets file won't be committed
 
 ---
 
