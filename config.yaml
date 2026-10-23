@@ -35,10 +35,62 @@ derived:
       Uncalibrated. Proportional to g/mm; needs the feeder calibration factor
       and powder density (see powder_calibration) for absolute units.
 
-# Defaults for the Powder Delivery Rate calculator.
+# Defaults for the Energy & Powder calculator.
 powder_calibration:
   feeder_factor_mm3_per_s_per_rpm: 1.3306   # GTV PF 2/2 LC, from calibration spreadsheet
-  default_powder_density_kg_m3: 2700
+
+# Thermophysical properties for the Energy & Powder calculator. Approximate
+# handbook values for the solid near room temperature; absorptivity is for a
+# 1070 nm fibre laser on powder/melt and varies strongly with surface state.
+materials:
+  - name: 316L stainless
+    density_kg_m3: 7900
+    specific_heat_J_kgK: 500
+    latent_heat_J_kg: 270000
+    melting_point_C: 1400
+    absorptivity: 0.35
+  - name: IN718
+    density_kg_m3: 8190
+    specific_heat_J_kgK: 435
+    latent_heat_J_kg: 227000
+    melting_point_C: 1300
+    absorptivity: 0.30
+  - name: RR1000
+    density_kg_m3: 8300
+    specific_heat_J_kgK: 450
+    latent_heat_J_kg: 230000
+    melting_point_C: 1330
+    absorptivity: 0.30
+  - name: Ti-6Al-4V
+    density_kg_m3: 4430
+    specific_heat_J_kgK: 560
+    latent_heat_J_kg: 290000
+    melting_point_C: 1650
+    absorptivity: 0.40
+  - name: Al6061
+    density_kg_m3: 2700
+    specific_heat_J_kgK: 900
+    latent_heat_J_kg: 390000
+    melting_point_C: 620
+    absorptivity: 0.12
+  - name: AlSi10Mg
+    density_kg_m3: 2670
+    specific_heat_J_kgK: 900
+    latent_heat_J_kg: 390000
+    melting_point_C: 580
+    absorptivity: 0.12
+  - name: Pure copper
+    density_kg_m3: 8960
+    specific_heat_J_kgK: 385
+    latent_heat_J_kg: 205000
+    melting_point_C: 1085
+    absorptivity: 0.06
+  - name: GRCop-42
+    density_kg_m3: 8900
+    specific_heat_J_kgK: 390
+    latent_heat_J_kg: 205000
+    melting_point_C: 1080
+    absorptivity: 0.10
 
 # ── Variable groups ───────────────────────────────────────────────────────────
 

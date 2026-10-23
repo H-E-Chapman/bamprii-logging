@@ -12,11 +12,16 @@ _HERE = pathlib.Path(__file__).parent
 CONFIG_FILE = _HERE / "config.yaml"
 
 VAR_TYPES = {"float", "integer", "text", "select", "auto_increment"}
+MATERIAL_FIELDS = ("density_kg_m3", "specific_heat_J_kgK", "latent_heat_J_kg", "melting_point_C", "absorptivity")
+
+
+def load_config() -> dict:
+    """Load and validate config.yaml; cached until the file's modification time changes."""
+    return _load_config(CONFIG_FILE.stat().st_mtime)
 
 
 @st.cache_data
-def load_config() -> dict:
-    """Load and validate config.yaml once; cached for the server lifetime."""
+def _load_config(mtime: float) -> dict:
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     _validate(config)
@@ -63,6 +68,14 @@ def _validate(config: dict) -> None:
             problems.append(f"derived entry {spec!r} needs 'name', 'formula' and 'inputs'.")
         elif any(a not in spec["inputs"] for a in spec.get("exclude_zero", [])):
             problems.append(f"derived '{spec['name']}': exclude_zero names an alias not in inputs.")
+
+    for mat in config.get("materials", []):
+        name = mat.get("name") or "<unnamed>"
+        for key in MATERIAL_FIELDS:
+            try:
+                float(mat[key])
+            except (KeyError, TypeError, ValueError):
+                problems.append(f"materials / {name}: '{key}' must be a number.")
 
     tz = config.get("timezone")
     if tz:

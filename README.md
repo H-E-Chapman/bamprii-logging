@@ -35,7 +35,7 @@ Google Sheets credentials live in Streamlit Cloud's secrets vault — never comm
 - **Google Sheets backend** — every log press appends a row to the shared sheet; reads are cached for a minute so several operators do not exhaust the shared API quota
 - **Plot tab** — bubble chart with configurable X/Y axes, colour, point grouping and a filter panel, plus derived quantities (energy densities etc.) defined in `config.yaml`
 - **Experiment Design tab** — comparative tests (Welch's t-test), screening designs (Plackett–Burman, fractional factorials) and response-surface designs (full factorial, CCD, Box–Behnken) with downloadable run tables
-- **Calculators tab** — powder delivery rate from feeder rpm
+- **Calculators tab** — energy and powder (energy densities, power density, interaction time, feeder delivery rate, powder per mm, energy per gram, and a melt-energy check against the specific and latent heat of a chosen or custom material), imaging (motion blur of the fastest feature with a simulated image of a feature of chosen size on the camera's pixels, frames per mm of track, frame budget against the camera buffer) and a beamtime planner (groups of substrates with their own tracks and layers, a flat time per scan, switch-over, initial setup, powder and equipment changes, breaks and safety margin → does the campaign fit, and what is left over) from feeder rpm
 
 ---
 
@@ -51,7 +51,8 @@ Everything the logger collects is defined in `config.yaml`. No code changes are 
 | `default_plot_x` / `default_plot_y` / `default_plot_colour` | Initial axis choices in the Plot tab, as `"Group: Variable"` column names |
 | `default_filters` | Map of column name → list of values pre-selected in the filter panel |
 | `derived` | Derived quantities for the Plot tab — see below |
-| `powder_calibration` | Feeder calibration factor and default powder density for the calculator |
+| `powder_calibration` | Feeder calibration factor for the calculator |
+| `materials` | Density, specific heat, latent heat of fusion, melting point and laser absorptivity per material, used by the Energy & Powder calculator |
 
 ### Groups and variables
 
@@ -124,7 +125,7 @@ bamprii-logging/
 ├── tab_log.py              # Log Scan tab: form state, input widgets, logging actions
 ├── tab_plot.py             # Plot Results tab: filters, derived quantities, bubble chart
 ├── tab_DoE.py              # Experiment Design tab: comparative, screening and RSM designs
-├── tab_calc.py             # Calculators tab
+├── tab_calc.py             # Calculators tab: energy & powder, imaging, beamtime planner
 ├── sheets.py               # SheetLogger: cached Google Sheets read/write
 ├── config.py               # Config loading, validation and helpers
 ├── utility.py              # Pure helpers for auto-increment counters (no Streamlit)
