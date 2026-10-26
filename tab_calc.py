@@ -388,10 +388,149 @@ def _plan(groups: pd.DataFrame, scan_s: float, switch_s: float, margin: float) -
     df["Scans per substrate"] = df["Tracks per substrate"] * df["Layers per track"]
     df["Tracks"] = df["Tracks per substrate"] * df["Substrates"]
     df["Scans"] = df["Scans per substrate"] * df["Substrates"]
-    df["Per substrate (s)"] = (df["Scans per substrate"] * scan_s + switch_s) * (1 + margin)
+    df["Ideal per substrate (s)"] = df["Scans per substrate"] * scan_s + switch_s
+    df["Per substrate (s)"] = df["Ideal per substrate (s)"] * (1 + margin)
+    df["Ideal total (s)"] = df["Ideal per substrate (s)"] * df["Substrates"]
     df["Total (s)"] = df["Per substrate (s)"] * df["Substrates"]
     df["Cumulative (s)"] = df["Total (s)"].cumsum()
     return df
+
+
+_GROUP_COLOURS = ["#2a78d6", "#1baf7a", "#6250d6", "#e87ba4", "#0f7b8c", "#b8860b", "#a0421a", "#5c5c5c"]
+_KIND_COLOURS = {"setup": "#898781", "powder": "#eda100", "equipment": "#eb6834", "breaks": "#d9d8d0"}
+_FIT_LABELS = {"margin": "✅ Fits", "ideal": "🟡 Fits inside the safety margin", "no": "❌ Does not fit"}
+
+
+def _schedule(plan: pd.DataFrame, setup_s: float, n_powder: int, powder_s: float, n_equip: int, equip_s: float):
+    """
+    The campaign in order: setup, then each group (idealised time followed by its
+    margin), with powder and equipment changes spread over the boundaries between
+    groups, earliest boundary first; with a single group they follow the setup.
+    Returns the segments (label, kind, seconds, group index) and, per group, the
+    cumulative time at its end without and with margins.
+    """
+    n = len(plan)
+    n_bound = max(n - 1, 1)
+
+    def spread(k: int) -> list[int]:
+        return [k // n_bound + (1 if i < k % n_bound else 0) for i in range(n_bound)]
+
+    powder, equip = spread(int(n_powder)), spread(int(n_equip))
+    segs = [("Initial setup", "setup", float(setup_s), None)]
+    cum_ideal = cum_margin = float(setup_s)
+    cum = []
+    for i, row in plan.iterrows():
+        if n == 1 or i > 0:
+            b = 0 if n == 1 else i - 1
+            for _ in range(powder[b]):
+                segs.append(("Powder change", "powder", float(powder_s), None))
+                cum_ideal += powder_s
+                cum_margin += powder_s
+            for _ in range(equip[b]):
+                segs.append(("Equipment change", "equipment", float(equip_s), None))
+                cum_ideal += equip_s
+                cum_margin += equip_s
+        ideal, total = float(row["Ideal total (s)"]), float(row["Total (s)"])
+        segs.append((row["Group"], "group", ideal, i))
+        segs.append((f"{row['Group']} (margin)", "margin", total - ideal, i))
+        cum_ideal += ideal
+        cum_margin += total
+        cum.append((cum_ideal, cum_margin))
+    return segs, cum
+
+
+def _timeline_figure(segs, available_h: float, breaks_per_day_h: float, group_names: list[str]) -> go.Figure:
+    """
+    The schedule laid out over 24 h days: each day row holds its usable hours
+    then its breaks; the available beamtime ends at a red line and anything past
+    it is drawn on a hatched background. Margins are the lighter shade of their group.
+    """
+    days_avail = math.ceil(available_h / 24) if available_h > 0 else 0
+
+    def day_len(d: int) -> float:
+        if days_avail and d == days_avail - 1:
+            return available_h - 24 * (days_avail - 1)
+        return 24.0
+
+    def day_usable(d: int) -> float:
+        return day_len(d) * (24 - breaks_per_day_h) / 24
+
+    def windows():
+        """Where work can go: each day's usable hours while the beamtime lasts, then the clock runs on continuously
+        from the moment it ends (same row, then full rows), with no breaks drawn in the overrun."""
+        for d in range(days_avail):
+            yield d, 0.0, day_usable(d), False
+        d, start = (days_avail - 1, day_len(days_avail - 1)) if days_avail else (0, 0.0)
+        while True:
+            if start < 24:
+                yield d, start, 24.0, True
+            d, start = d + 1, 0.0
+
+    pieces, win = [], windows()
+    cur = next(win)
+    pos = cur[1]
+    for label, kind, seconds, gi in segs:
+        h = seconds / 3600
+        while h > 1e-9:
+            cap = cur[2] - pos
+            if cap <= 1e-9:
+                cur = next(win)
+                pos = cur[1]
+                continue
+            w = min(h, cap)
+            pieces.append((cur[0], pos, w, label, kind, gi, cur[3]))
+            pos, h = pos + w, h - w
+    n_days = max(days_avail, max((p[0] for p in pieces), default=0) + 1)
+    colours = {g: _GROUP_COLOURS[i % len(_GROUP_COLOURS)] for i, g in enumerate(group_names)}
+    ylabels = [f"Day {d + 1}" + (" ⚠ overrun" if d >= days_avail else "") for d in range(n_days)]
+    overrun_h = sum(p[2] for p in pieces if p[6])
+    fig = go.Figure()
+    shown = set()
+    for d, start, w, label, kind, gi, over in pieces:
+        if kind in ("group", "margin"):
+            colour, name = colours[group_names[gi]], group_names[gi]
+        else:
+            colour, name = _KIND_COLOURS[kind], label
+        legend_key = "overrun" if over else (name if kind != "margin" else "margin")
+        marker = dict(color=colour, opacity=1.0, line=dict(color="white", width=1))
+        if kind == "margin":   # same colour as its group, translucent and dotted
+            marker = dict(color=colour, opacity=0.7, line=dict(color="white", width=1),
+                          pattern=dict(shape=".", fgcolor=colour, bgcolor="white", solidity=0.5, size=6))
+        if over:   # past the end of the beamtime: red hatching over the group colour and a red outline
+            marker = dict(color=colour, opacity=0.7 if kind == "margin" else 1.0, line=dict(color="#d03b3b", width=2),
+                          pattern=dict(shape="/", fgcolor="#d03b3b", bgcolor=colour, solidity=0.35, size=8))
+        fig.add_bar(y=[ylabels[d]], x=[w], base=[start], orientation="h",
+                    name="overrun (beyond the beamtime)" if over else (name if kind != "margin" else "safety margin"),
+                    marker=marker, legendgroup=legend_key, showlegend=legend_key not in shown,
+                    hovertemplate=f"{label}<br>{_fmt_duration(w * 3600)} on day {d + 1}" + ("<br><b>beyond the beamtime</b>" if over else "") + "<extra></extra>")
+        shown.add(legend_key)
+    for d in range(days_avail):
+        fig.add_bar(y=[ylabels[d]], x=[day_len(d) - day_usable(d)], base=[day_usable(d)], orientation="h", name="breaks",
+                    marker=dict(color=_KIND_COLOURS["breaks"], line=dict(color="white", width=1)), legendgroup="breaks",
+                    showlegend=d == 0, hovertemplate=f"breaks<br>{_fmt_duration((day_len(d) - day_usable(d)) * 3600)} on day {d + 1}<extra></extra>")
+    for d in range(n_days):
+        beyond = (0.0, 24.0) if d >= days_avail else ((day_len(d), 24.0) if day_len(d) < 24 else None)
+        if beyond:
+            fig.add_shape(type="rect", x0=beyond[0], x1=beyond[1], y0=d - 0.5, y1=d + 0.5, layer="below", line=dict(width=0),
+                          fillcolor="rgba(208, 59, 59, 0.16)")
+    if days_avail:
+        x_end = day_len(days_avail - 1)
+        fig.add_shape(type="line", x0=x_end, x1=x_end, y0=days_avail - 1.5, y1=days_avail - 0.5, line=dict(color="#d03b3b", width=4))
+    ends = f"the beamtime ends at hour {day_len(days_avail - 1):g} of day {days_avail} (red line)" if days_avail else "no beamtime available"
+    title = (f"<b>Overrun: {_fmt_duration(overrun_h * 3600)} beyond the end, hatched red</b> — {ends}" if overrun_h > 0
+             else f"<b>The campaign fits inside the beamtime</b> — {ends}")
+    fig.update_layout(barmode="overlay", template="plotly_white", height=120 + 36 * n_days, margin=dict(l=20, r=20, t=70, b=44),
+                      title=dict(text=title, x=0, y=0.98, yanchor="top", font=dict(size=13, color="#d03b3b" if overrun_h > 0 else "#1b7a3a")),
+                      legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0, font=dict(size=11)), bargap=0.25,
+                      xaxis=dict(range=[0, 24], dtick=2, title="hour of day"),
+                      yaxis=dict(autorange="reversed", tickfont=dict(color="#0b0b0b")))
+    if n_days > days_avail:   # overrun day labels in red
+        fig.update_yaxes(tickvals=ylabels, ticktext=[f"<span style='color:#d03b3b'>{t}</span>" if "overrun" in t else t for t in ylabels])
+    return fig
+
+
+_BEAMLINE_TERM = {"DLS I12": 0, "ESRF ID19": 15, "New beamline": 20}
+_RULE_HELP = "Fitted to prior beamtimes with BAMPR-II."
 
 
 def _render_time_planner() -> None:
@@ -431,13 +570,26 @@ def _render_time_planner() -> None:
         )
     with c2:
         st.markdown("**Allowances**")
-        margin_pct = st.number_input(
-            "Safety margin (%)", min_value=0, max_value=200, value=25, step=5, key="tp_margin",
-            help="Added to every substrate for retries, faults and the unexpected.",
-        )
+        from_rule = st.checkbox("Margin from campaign factors", value=False, key="tp_rule", help=_RULE_HELP)
+        if from_rule:
+            new_rig = st.checkbox("New experimental rig (+10%)", key="tp_new_rig",
+                                  help="Equipment not previously run at a synchrotron: a new probe, magnet or set-up.")
+            complex_rig = st.checkbox("Complex rig (+25%)", key="tp_complex_rig",
+                                      help="On top of the new-rig term, for rigs with their own control and alignment, such as the ultrasound probe.")
+            experienced = st.checkbox("Experienced team (−30%)", value=True, key="tp_experienced",
+                                      help="With this equipment and at this beamline. Untick if either is new to the team.")
+            beamline = st.selectbox("Beamline", list(_BEAMLINE_TERM), key="tp_beamline",
+                                    format_func=lambda b: f"{b} (+{_BEAMLINE_TERM[b]}%)")
+            margin_pct = 35 + 10 * new_rig + 25 * complex_rig - 30 * experienced + _BEAMLINE_TERM[beamline]
+            st.metric("Safety margin", f"{margin_pct}%", help="Set by the campaign factors above; untick to enter it by hand.")
+        else:
+            margin_pct = st.number_input(
+                "Safety margin (%)", min_value=0, max_value=200, value=25, step=5, key="tp_margin",
+                help="Added to every substrate for retries, faults and the unexpected.",
+            )
         breaks_per_day_h = st.number_input(
-            "Breaks per 24 h (h)", min_value=0.0, max_value=24.0, value=4.0, step=0.5, key="tp_breaks",
-            help="4 hours is 1 hour for breakfast and 1½ hours each for lunch and dinner, including handovers. Scaled to the available beamtime.",
+            "Breaks per 24 h (h)", min_value=0.0, max_value=24.0, value=6.0, step=0.5, key="tp_breaks",
+            help="6 hours is 1 hour for breakfast, 1½ hours each for lunch and dinner, and 1 hour off for each of the two shifts, including handovers. Scaled to the available beamtime.",
         )
     with c3:
         st.markdown("**Campaign overheads**")
@@ -474,13 +626,15 @@ def _render_time_planner() -> None:
     substrates_s = float(plan["Total (s)"].sum())
     planned_s = substrates_s + overhead_s
     surplus_s = usable_s - planned_s
-    fits = plan["Cumulative (s)"] + overhead_s <= usable_s
-    n_fit = int(fits.sum())
+    segs, cum = _schedule(plan, setup_h * 3600, n_powder, powder_h * 3600, n_equip, equip_h * 3600)
+    status = ["margin" if cm <= usable_s else ("ideal" if ci <= usable_s else "no") for ci, cm in cum]
+    n_fit, n_ideal = status.count("margin"), status.count("ideal")
 
     st.markdown("---")
-    m1, m0, m2, m3, m4 = st.columns(5)
-    m1.metric("Substrates planned", int(plan["Substrates"].sum()), help=f"{int(plan['Scans'].sum())} scans in total.")
+    m1, m0, ms, m2, m3, m4 = st.columns(6)
+    m1.metric("Substrates planned", int(plan["Substrates"].sum()))
     m0.metric("Tracks (conditions)", int(plan["Tracks"].sum()), help="One parameter set per track: substrates × tracks per substrate.")
+    ms.metric("Scans", int(plan["Scans"].sum()), help="One X-ray scan per layer of each track: substrates × tracks per substrate × layers per track.")
     m2.metric("Time needed", _fmt_duration(planned_s),
               help=f"Substrates {_fmt_duration(substrates_s)} (with the {margin_pct}% margin) "
                    f"+ overheads {_fmt_duration(overhead_s)}.")
@@ -490,19 +644,29 @@ def _render_time_planner() -> None:
     if surplus_s >= 0:
         last = plan.iloc[-1]
         extra = int(surplus_s // last["Per substrate (s)"]) if last["Per substrate (s)"] else 0
-        st.success(f"The plan fits. The surplus covers about {extra} more substrate(s) of '{last['Group']}'.")
+        st.success(f"The plan fits with every safety margin intact. The surplus covers about {extra} more substrate(s) of '{last['Group']}'.")
+    elif n_fit + n_ideal == len(plan):
+        st.warning(
+            f"The plan fits only inside the safety margin: {n_fit} of {len(plan)} groups complete with their margin intact "
+            f"and the remaining {n_ideal} only by using it, leaving no allowance for retries or faults."
+        )
     else:
         st.error(
-            f"The plan does not fit: {n_fit} of {len(plan)} groups complete in table order. "
-            "Reduce counts, trim the time per scan, or reorder the groups by priority."
+            f"The plan does not fit: {n_fit} of {len(plan)} groups fit, {n_ideal} fit only inside the safety margin, "
+            f"and {len(plan) - n_fit - n_ideal} do not fit at all. Reduce counts, trim the time per scan, or "
+            "reorder the groups by priority."
         )
+
+    st.markdown("**Campaign timeline** — one row per 24 h day; lighter shades are each group's margin, the red line is the end of the beamtime.")
+    st.plotly_chart(_timeline_figure(segs, available_h, breaks_per_day_h, plan["Group"].tolist()), width="stretch",
+                    config={"displayModeBar": False})
 
     table = plan.assign(
         **{
             "Per substrate": plan["Per substrate (s)"].map(_fmt_duration),
             "Group total": plan["Total (s)"].map(_fmt_duration),
             "Cumulative": plan["Cumulative (s)"].map(_fmt_duration),
-            "Fits": fits.map({True: "✅", False: "❌"}),
+            "Fits": [_FIT_LABELS[x] for x in status],
         }
     )[["Group", "Substrates", "Tracks per substrate", "Layers per track", "Tracks", "Scans per substrate",
        "Scans", "Per substrate", "Group total", "Cumulative", "Fits"]]
@@ -517,7 +681,9 @@ def _render_time_planner() -> None:
         hide_index=True, width="stretch",
     )
     st.caption(
-        "Durations are h:mm:ss. 'Fits' is cumulative in table order after the overheads, so put the "
-        "highest-priority groups first. Per-substrate time = scans × time per scan + switch-over, plus "
-        "the margin; the overheads are added once without a margin."
+        "Durations are h:mm:ss. 'Fits' is cumulative in table order: 'Fits' means the group completes with its "
+        "safety margin intact, 'Fits inside the safety margin' that it completes only by using that margin, "
+        "so put the highest-priority groups first. Per-substrate time = scans × time per scan "
+        "+ switch-over, plus the margin; the setup comes first and the powder and equipment changes are placed "
+        "between groups, without a margin."
     )

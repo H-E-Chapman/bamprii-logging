@@ -36,8 +36,10 @@ h2 { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
 .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 label.f { display: grid; gap: 3px; margin-bottom: 10px; font-size: 12.5px; color: var(--fg-2); }
 label.f span.l { display: flex; align-items: center; gap: 6px; }
-input[type=number], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--ring); border-radius: 4px; padding: 6px 8px; width: 100%; font-variant-numeric: tabular-nums; }
-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+select, input[type=number], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--ring); border-radius: 4px; padding: 6px 8px; width: 100%; font-variant-numeric: tabular-nums; }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+label.chk { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; color: var(--fg-2); } label.chk input { width: auto; }
+input:disabled { color: var(--muted); background: var(--surface); }
 .info { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-weight: 700; cursor: help; position: relative; }
 .info:hover::after, .info:focus::after { content: attr(data-tip); position: absolute; left: 20px; top: -6px; z-index: 5; width: 280px; white-space: normal; background: var(--fg); color: var(--bg); padding: 8px 10px; border-radius: 5px; font-size: 12px; font-weight: 400; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
 .tablewrap { overflow-x: auto; }
@@ -58,10 +60,24 @@ button.x { padding: 2px 8px; color: var(--muted); }
 .verdict { border-radius: 6px; padding: 10px 14px; font-weight: 500; }
 .verdict.ok { background: var(--ok-bg); color: var(--ok); }
 .verdict.bad { background: var(--bad-bg); color: var(--bad); }
+.verdict.warn { background: #fbf1d9; color: #7a5200; }
 .results { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 @media (max-width: 760px) { .results { grid-template-columns: 1fr; } }
 .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
-.fit-y { color: var(--ok); font-weight: 600; } .fit-n { color: var(--bad); font-weight: 600; }
+.fit-y { color: var(--ok); font-weight: 600; } .fit-m { color: #9a6b00; font-weight: 600; } .fit-n { color: var(--bad); font-weight: 600; }
+.day { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: var(--fg-2); }
+.bar { position: relative; height: 22px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+.seg { position: absolute; top: 0; height: 100%; box-shadow: inset -1px 0 0 var(--surface); }
+.seg.breaks { background: repeating-linear-gradient(135deg, var(--grid) 0 3px, var(--surface) 3px 6px); }
+.bar .beyond { position: absolute; top: 0; height: 100%; background: rgba(208,59,59,0.14); }
+.bar .end { position: absolute; top: -3px; height: calc(100% + 6px); width: 4px; background: var(--bad); z-index: 2; }
+.bar { overflow: visible; } .seg.over { background-image: repeating-linear-gradient(45deg, rgba(208,59,59,0.5) 0 4px, transparent 4px 8px) !important; outline: 2px solid var(--bad); outline-offset: -2px; }
+.day.over span { color: var(--bad); font-weight: 600; } .endlabel { font-size: 12px; font-weight: 600; color: var(--bad); }
+.overrun { margin: 6px 0 0; font-weight: 600; color: var(--bad); }
+.seg.margin, .legend i.margin { opacity: 0.7; background-image: radial-gradient(rgba(255,255,255,0.85) 1.3px, transparent 1.5px); background-size: 6px 6px; }
+.axis { display: grid; grid-template-columns: 48px 1fr; gap: 8px; font-size: 11px; color: var(--muted); } .axis div { display: flex; justify-content: space-between; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--fg-2); margin-top: 8px; } .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 </style>
 </head>
 <body>
@@ -88,7 +104,14 @@ button.x { padding: 2px 8px; color: var(--muted); }
       <h2>Per scan / substrate</h2>
       <label class="f"><span class="l">Time per scan (s) <i class="info" tabindex="0" data-tip="One layer of one track including repositioning, camera save and logging. For beamtime MA-7161, median time-per-scan was 4:15, with a lower quartile of 2:32, and an upper quartile of 7:19. A sensible time-per-scan default would be 5 minutes.">i</i></span><input type="number" id="scan" value="300" min="0" step="15"></label>
       <label class="f"><span class="l">Substrate switch-over (min) <i class="info" tabindex="0" data-tip="Open hutch, swap substrate, realign, close and search. For beamtime MA-7161, median switch-over was 13:28, with a lower quartile of 8:50, and an upper quartile of 22:06. A sensible default is 15 minutes.">i</i></span><input type="number" id="switch" value="15" min="0" step="1"></label>
-      <label class="f"><span class="l">Safety margin (%) <i class="info" tabindex="0" data-tip="Added to every substrate for retries, faults and the unexpected. Overheads below are added without a margin.">i</i></span><input type="number" id="margin" value="25" min="0" max="200" step="5"></label>
+      <label class="chk"><input type="checkbox" id="userule"> Margin from campaign factors <i class="info" tabindex="0" data-tip="Fitted to prior beamtimes with BAMPR-II.">i</i></label>
+      <div id="factors" hidden>
+      <label class="chk"><input type="checkbox" id="newrig"> New experimental rig (+10%) <i class="info" tabindex="0" data-tip="Equipment not previously run at a synchrotron: a new probe, magnet or set-up.">i</i></label>
+      <label class="chk"><input type="checkbox" id="complexrig"> Complex rig (+25%) <i class="info" tabindex="0" data-tip="On top of the new-rig term, for rigs with their own control and alignment, such as the ultrasound probe.">i</i></label>
+      <label class="chk"><input type="checkbox" id="experienced" checked> Experienced team (−30%) <i class="info" tabindex="0" data-tip="With this equipment and at this beamline. Untick if either is new to the team.">i</i></label>
+      <label class="f"><span class="l">Beamline</span><select id="beamline"><option value="0">DLS I12 (+0%)</option><option value="15">ESRF ID19 (+15%)</option><option value="20">New beamline (+20%)</option></select></label>
+      </div>
+      <label class="f"><span class="l">Safety margin (%) <i class="info" tabindex="0" data-tip="Added to every substrate for retries, faults and the unexpected. Overheads below are added without a margin. Set by the campaign factors above unless that box is unticked.">i</i></span><input type="number" id="margin" value="25" min="0" max="200" step="5"></label>
     </div>
     <div class="panel">
       <h2>Campaign overheads</h2>
@@ -101,18 +124,25 @@ button.x { padding: 2px 8px; color: var(--muted); }
     <div class="panel">
       <h2>Beamtime</h2>
       <label class="f"><span class="l">Available beamtime (h)</span><input type="number" id="available" value="12" min="0" step="1"></label>
-      <label class="f"><span class="l">Breaks per 24 h (h) <i class="info" tabindex="0" data-tip="4 hours is 1 hour for breakfast and 1½ hours each for lunch and dinner, including handovers. Scaled to the available beamtime.">i</i></span><input type="number" id="breaks" value="4" min="0" max="24" step="0.5"></label>
+      <label class="f"><span class="l">Breaks per 24 h (h) <i class="info" tabindex="0" data-tip="6 hours is 1 hour for breakfast, 1½ hours each for lunch and dinner, and 1 hour off for each of the two shifts, including handovers. Scaled to the available beamtime.">i</i></span><input type="number" id="breaks" value="6" min="0" max="24" step="0.5"></label>
     </div>
   </section>
 
   <section class="tiles" id="tiles"></section>
   <div class="verdict" id="verdict"></div>
 
+  <section class="panel">
+    <h2>Campaign timeline</h2>
+    <div id="timeline"></div>
+    <div class="axis"><div></div><div><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
   <section class="results">
     <div class="panel"><h2>Substrate groups</h2><div class="tablewrap"><table id="out"></table></div></div>
     <div class="panel"><h2>Campaign budget</h2><div class="tablewrap"><table id="budget"></table></div></div>
   </section>
-  <p class="note">Durations are h:mm:ss. Per-substrate time = scans × time per scan + switch-over, plus the margin. Overheads are added once without a margin. "Fits" is cumulative in table order after the overheads.</p>
+  <p class="note">Durations are h:mm:ss. Per-substrate time = scans × time per scan + switch-over, plus the margin. The setup comes first and the powder and equipment changes are placed between groups, without a margin. "Fits" is cumulative in table order: "Fits" means the group completes with its safety margin intact, "Fits inside the safety margin" that it completes only by using that margin. One timeline row is one 24 h day; lighter shades are each group's margin, hatched grey the breaks, and the red line the end of the beamtime.</p>
 </main>
 
 <script>
@@ -126,9 +156,8 @@ function plan(groups, p) {
   const rows = groups
     .map(g => ({ name: g.name, n: Math.floor(g.n), tracks: Math.floor(g.tracks), layers: Math.floor(g.layers) }))
     .filter(g => g.n > 0 && g.tracks > 0 && g.layers > 0)
-    .map(g => { const scansPer = g.tracks * g.layers; const per = (scansPer * p.scan + p.switchS) * (1 + p.margin);
-      return { ...g, scansPer, scans: scansPer * g.n, tracksTotal: g.tracks * g.n, per, total: per * g.n }; });
-  let cum = 0; rows.forEach(r => { cum += r.total; r.cum = cum; });
+    .map(g => { const scansPer = g.tracks * g.layers; const ideal = scansPer * p.scan + p.switchS; const per = ideal * (1 + p.margin);
+      return { ...g, scansPer, scans: scansPer * g.n, tracksTotal: g.tracks * g.n, ideal, idealTotal: ideal * g.n, per, total: per * g.n }; });
   const overheads = [["Initial setup", p.setup], [`${p.nPowder} powder change${p.nPowder === 1 ? "" : "s"}`, p.nPowder * p.powder],
                      [`${p.nEquip} major equipment change${p.nEquip === 1 ? "" : "s"}`, p.nEquip * p.equip]];
   const overhead = overheads.reduce((a, [, v]) => a + v, 0);
@@ -136,8 +165,66 @@ function plan(groups, p) {
   const breaks = p.available / 86400 * p.breaksPerDay;
   const usable = Math.max(0, p.available - breaks);
   const need = substrates + overhead;
-  rows.forEach(r => { r.fits = r.cum + overhead <= usable; });
-  return { rows, overheads, overhead, substrates, need, usable, breaks, surplus: usable - need };
+  // schedule: setup, then each group (idealised time, then its margin) with the changes spread over the boundaries between groups
+  const nBound = Math.max(rows.length - 1, 1);
+  const spread = k => [...Array(nBound)].map((_, i) => Math.floor(k / nBound) + (i < k % nBound ? 1 : 0));
+  const powder = spread(p.nPowder), equip = spread(p.nEquip);
+  const segs = [{ label: "Initial setup", kind: "setup", s: p.setup }];
+  let cumIdeal = p.setup, cumMargin = p.setup;
+  rows.forEach((r, i) => {
+    if (rows.length === 1 || i > 0) {
+      const b = rows.length === 1 ? 0 : i - 1;
+      for (let k = 0; k < powder[b]; k++) { segs.push({ label: "Powder change", kind: "powder", s: p.powder }); cumIdeal += p.powder; cumMargin += p.powder; }
+      for (let k = 0; k < equip[b]; k++) { segs.push({ label: "Equipment change", kind: "equipment", s: p.equip }); cumIdeal += p.equip; cumMargin += p.equip; }
+    }
+    segs.push({ label: r.name, kind: "group", s: r.idealTotal, g: i }); segs.push({ label: `${r.name} (margin)`, kind: "margin", s: r.total - r.idealTotal, g: i });
+    cumIdeal += r.idealTotal; cumMargin += r.total; r.cum = cumMargin; r.cumIdeal = cumIdeal;
+    r.fit = cumMargin <= usable ? "margin" : (cumIdeal <= usable ? "ideal" : "no");
+  });
+  return { rows, overheads, overhead, substrates, need, usable, breaks, surplus: usable - need, segs };
+}
+
+// ---- timeline: the schedule over 24 h days, each row its usable hours then its breaks; past the beamtime is hatched red
+const GROUP_COLOURS = ["#2a78d6", "#1baf7a", "#6250d6", "#e87ba4", "#0f7b8c", "#b8860b", "#a0421a", "#5c5c5c"];
+const KIND_COLOURS = { setup: "#898781", powder: "#eda100", equipment: "#eb6834" };
+function timeline(r, p) {
+  const availH = p.available / 3600, breaksDay = p.breaksPerDay / 3600, daysAvail = availH > 0 ? Math.ceil(availH / 24) : 0;
+  const dayLen = d => (daysAvail && d === daysAvail - 1) ? availH - 24 * (daysAvail - 1) : 24;
+  const dayUsable = d => dayLen(d) * (24 - breaksDay) / 24;
+  // windows where work can go: each day's usable hours while the beamtime lasts, then the clock runs on continuously
+  // from the moment it ends (same row, then full rows), with no breaks drawn in the overrun
+  const windows = []; for (let d = 0; d < daysAvail; d++) windows.push({ day: d, start: 0, end: dayUsable(d), over: false });
+  let tailDay = daysAvail ? daysAvail - 1 : 0, tailStart = daysAvail ? dayLen(daysAvail - 1) : 0;
+  const nextWindow = () => { if (windows.length) return windows.shift(); while (tailStart >= 24) { tailDay += 1; tailStart = 0; } const w = { day: tailDay, start: tailStart, end: 24, over: true }; tailDay += 1; tailStart = 0; return w; };
+  const pieces = []; let cur = nextWindow(), pos = cur.start;
+  for (const seg of r.segs) {
+    let h = seg.s / 3600;
+    while (h > 1e-9) {
+      const cap = cur.end - pos;
+      if (cap <= 1e-9) { cur = nextWindow(); pos = cur.start; continue; }
+      const w = Math.min(h, cap); pieces.push({ day: cur.day, start: pos, w, over: cur.over, ...seg }); pos += w; h -= w;
+    }
+  }
+  const nDays = Math.max(daysAvail, pieces.length ? Math.max(...pieces.map(x => x.day)) + 1 : 0);
+  const colour = x => x.kind === "group" || x.kind === "margin" ? GROUP_COLOURS[x.g % GROUP_COLOURS.length] : KIND_COLOURS[x.kind];
+  const pct = h => `${(h / 24 * 100).toFixed(3)}%`;
+  $("timeline").innerHTML = [...Array(nDays)].map((_, d) => {
+    const over = d >= daysAvail;
+    const segHtml = pieces.filter(x => x.day === d).map(x =>
+      `<span class="seg ${x.kind}${x.over ? " over" : ""}" style="left:${pct(x.start)};width:${pct(x.w)};background:${colour(x)}" title="${x.label}: ${fmt(x.w * 3600)} on day ${d + 1}${x.over ? " — beyond the beamtime" : ""}"></span>`).join("");
+    const brk = d < daysAvail ? `<span class="seg breaks" style="left:${pct(dayUsable(d))};width:${pct(dayLen(d) - dayUsable(d))}" title="breaks: ${fmt((dayLen(d) - dayUsable(d)) * 3600)} on day ${d + 1}"></span>` : "";
+    const beyond = d >= daysAvail ? `<span class="beyond" style="left:0;width:100%" title="beyond the available beamtime"></span>`
+      : (dayLen(d) < 24 ? `<span class="beyond" style="left:${pct(dayLen(d))};width:${pct(24 - dayLen(d))}" title="beyond the available beamtime"></span>` : "");
+    const end = d === daysAvail - 1 ? `<span class="end" style="left:calc(${pct(dayLen(d))} - 2px)" title="end of beamtime"></span>` : "";
+    return `<div class="day${over ? " over" : ""}"><span>Day ${d + 1}${over ? " ⚠" : ""}</span><div class="bar">${beyond}${segHtml}${brk}${end}</div></div>`;
+  }).join("");
+  const overrunH = pieces.filter(x => x.over).reduce((a, x) => a + x.w, 0);
+  if (daysAvail) $("timeline").insertAdjacentHTML("afterbegin", `<div class="axis"><div></div><div style="position:relative;height:18px"><span class="endlabel" style="position:absolute;left:calc(${pct(dayLen(daysAvail - 1))} - 48px)">▼ beamtime ends</span></div></div>`);
+  $("timeline").insertAdjacentHTML("beforeend", overrunH > 0 ? `<p class="overrun">⚠ Overrun: ${fmt(overrunH * 3600)} beyond the beamtime (hatched red).</p>` : "");
+  const chips = [["Initial setup", KIND_COLOURS.setup], ...r.rows.map((x, i) => [x.name, GROUP_COLOURS[i % GROUP_COLOURS.length]]),
+                 ...(p.nPowder ? [["Powder change", KIND_COLOURS.powder]] : []), ...(p.nEquip ? [["Equipment change", KIND_COLOURS.equipment]] : [])];
+  $("legend").innerHTML = chips.map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("") +
+    `<span><i class="margin" style="background:${GROUP_COLOURS[0]}"></i>safety margin (dotted, same colour)</span><span><i class="breaks" style="background:repeating-linear-gradient(135deg,var(--grid) 0 3px,var(--surface) 3px 6px)"></i>breaks</span>`;
 }
 
 // ---- group table
@@ -161,14 +248,19 @@ function readGroups() {
 
 // ---- render
 function render() {
+  const chk = id => $(id).checked;
+  const rule = 35 + (chk("newrig") ? 10 : 0) + (chk("complexrig") ? 25 : 0) - (chk("experienced") ? 30 : 0) + (+$("beamline").value || 0);
+  $("factors").hidden = !chk("userule");
+  if (chk("userule")) { $("margin").value = rule; $("margin").disabled = true; } else { $("margin").disabled = false; }
   const p = { scan: num("scan"), switchS: num("switch") * 60, margin: num("margin") / 100, setup: num("setup") * 3600,
               nPowder: Math.floor(num("npowder")), powder: num("powderh") * 3600, nEquip: Math.floor(num("nequip")), equip: num("equiph") * 3600,
               available: num("available") * 3600, breaksPerDay: num("breaks") * 3600 };
   const r = plan(readGroups(), p);
   const nSub = r.rows.reduce((a, x) => a + x.n, 0), nScans = r.rows.reduce((a, x) => a + x.scans, 0), nTracks = r.rows.reduce((a, x) => a + x.tracksTotal, 0);
   $("tiles").innerHTML = [
-    ["Substrates planned", nSub, `${nScans} scans in total`],
+    ["Substrates planned", nSub, "across all groups"],
     ["Tracks (conditions)", nTracks, "one parameter set per track"],
+    ["Scans", nScans, "one X-ray scan per layer of each track"],
     ["Time needed", fmt(r.need), `substrates ${fmt(r.substrates)} + overheads ${fmt(r.overhead)}`],
     ["Usable beamtime", fmt(r.usable), `${fmt(r.breaks)} of breaks removed`],
     [r.surplus >= 0 ? "Surplus" : "Shortfall", fmt(Math.abs(r.surplus)), r.surplus >= 0 ? "left after every planned substrate" : "beyond the usable time"],
@@ -176,11 +268,13 @@ function render() {
   const v = $("verdict");
   if (!r.rows.length) { v.className = "verdict bad"; v.textContent = "Add at least one group with substrates, tracks and layers above zero."; }
   else if (r.surplus >= 0) { const last = r.rows[r.rows.length - 1]; const extra = last.per ? Math.floor(r.surplus / last.per) : 0;
-    v.className = "verdict ok"; v.textContent = `The plan fits. The surplus covers about ${extra} more substrate${extra === 1 ? "" : "s"} of "${last.name}".`; }
-  else { const nFit = r.rows.filter(x => x.fits).length;
-    v.className = "verdict bad"; v.textContent = `The plan does not fit: ${nFit} of ${r.rows.length} groups complete in table order. Reduce counts, trim the time per scan, or reorder the groups by priority.`; }
+    v.className = "verdict ok"; v.textContent = `The plan fits with every safety margin intact. The surplus covers about ${extra} more substrate${extra === 1 ? "" : "s"} of "${last.name}".`; }
+  else { const nFit = r.rows.filter(x => x.fit === "margin").length, nIdeal = r.rows.filter(x => x.fit === "ideal").length, nNo = r.rows.length - nFit - nIdeal;
+    if (nNo === 0) { v.className = "verdict warn"; v.textContent = `The plan fits only inside the safety margin: ${nFit} of ${r.rows.length} groups complete with their margin intact and the remaining ${nIdeal} only by using it, leaving no allowance for retries or faults.`; }
+    else { v.className = "verdict bad"; v.textContent = `The plan does not fit: ${nFit} of ${r.rows.length} groups fit, ${nIdeal} fit only inside the safety margin, and ${nNo} do not fit at all. Reduce counts, trim the time per scan, or reorder the groups by priority.`; } }
+  if (r.rows.length) timeline(r, p); else { $("timeline").innerHTML = ""; $("legend").innerHTML = ""; }
   $("out").innerHTML = `<thead><tr><th>Group</th><th class="n">Substrates</th><th class="n">Tracks</th><th class="n">Scans / substrate</th><th class="n">Scans</th><th class="n">Per substrate</th><th class="n">Group total</th><th class="n">Cumulative</th><th>Fits</th></tr></thead><tbody>` +
-    r.rows.map(x => `<tr><td>${x.name}</td><td class="n">${x.n}</td><td class="n">${x.tracksTotal}</td><td class="n">${x.scansPer}</td><td class="n">${x.scans}</td><td class="n">${fmt(x.per)}</td><td class="n">${fmt(x.total)}</td><td class="n">${fmt(x.cum)}</td><td class="${x.fits ? "fit-y" : "fit-n"}">${x.fits ? "✓ yes" : "✗ no"}</td></tr>`).join("") + `</tbody>`;
+    r.rows.map(x => `<tr><td>${x.name}</td><td class="n">${x.n}</td><td class="n">${x.tracksTotal}</td><td class="n">${x.scansPer}</td><td class="n">${x.scans}</td><td class="n">${fmt(x.per)}</td><td class="n">${fmt(x.total)}</td><td class="n">${fmt(x.cum)}</td><td class="${{ margin: "fit-y", ideal: "fit-m", no: "fit-n" }[x.fit]}">${{ margin: "✓ Fits", ideal: "~ Fits inside the safety margin", no: "✗ Does not fit" }[x.fit]}</td></tr>`).join("") + `</tbody>`;
   $("budget").innerHTML = `<thead><tr><th>Item</th><th class="n">Time</th></tr></thead><tbody>` +
     r.overheads.map(([k, s]) => `<tr><td>${k}</td><td class="n">${fmt(s)}</td></tr>`).join("") +
     `<tr><td>Overheads total</td><td class="n">${fmt(r.overhead)}</td></tr><tr><td>Substrates (with margin)</td><td class="n">${fmt(r.substrates)}</td></tr><tr><td><b>Time needed</b></td><td class="n"><b>${fmt(r.need)}</b></td></tr><tr><td>Usable beamtime</td><td class="n">${fmt(r.usable)}</td></tr></tbody>`;
@@ -188,7 +282,7 @@ function render() {
 
 DEFAULT_GROUPS.forEach(g => addRow(...g));
 $("add").addEventListener("click", () => { addRow(); render(); });
-document.querySelectorAll(".params input").forEach(i => i.addEventListener("input", render));
+document.querySelectorAll(".params input, .params select").forEach(i => { i.addEventListener("input", render); i.addEventListener("change", render); });
 render();
 </script>
 </body>
