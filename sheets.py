@@ -1,10 +1,13 @@
 """
 sheets.py — Google Sheets access layer.
 
-Every read goes through load(), which is cached for CACHE_TTL seconds so that
-widget interactions do not each cost a round-trip to Google (all users share
-one service account and therefore one API quota). append() and refresh()
-clear that cache.
+Every read goes through load() or load_calc_values(), which are cached for
+CACHE_TTL seconds so that widget interactions do not each cost a round-trip to
+Google (all users share one service account and therefore one API quota).
+append(), append_calc_value() and refresh() clear that cache.
+
+The 'Log' worksheet holds experiment runs; the 'Calc Values' worksheet holds
+the Energy & Powder calculator values that were logged with an outcome rating.
 """
 
 import gspread
@@ -16,14 +19,30 @@ from utility import extract_counter
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 WORKSHEET = "Log"
+CALC_WORKSHEET = "Calc Values"
 CACHE_TTL = 60  # seconds
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
-def _fetch_records(_ws: gspread.Worksheet) -> list[dict]:
+def _fetch_records(_ws: gspread.Worksheet, title: str) -> list[dict]:
     """
-    Worksheet rows as dicts keyed by header. The leading underscore keeps _ws
-    out of the cache key, so one cache serves every session on the server.
+    Worksheet rows as dicts keyed by header.
+
+    The leading underscore keeps _ws out of the cache key, so one cache serves
+    every session on the server; `title` is part of the key and keeps the
+    worksheets' cached reads apart.
+
+    Parameters
+    ----------
+    _ws : gspread.Worksheet
+        Worksheet to read.
+    title : str
+        Worksheet title, used only as the cache key.
+
+    Returns
+    -------
+    list of dict
+        One dict per non-blank data row, keyed by header.
 
     Trailing blank header cells are dropped and each row is padded or trimmed
     to the header width, so stray cells beyond the header cannot break the read.
@@ -40,6 +59,32 @@ def _fetch_records(_ws: gspread.Worksheet) -> list[dict]:
         for row in rows[1:]
         if any(cell.strip() for cell in row[:width])
     ]
+
+
+def _append_row(ws: gspread.Worksheet, row: dict) -> None:
+    """
+    Append a row dict to a worksheet, extending the header row if the dict
+    contains keys the header does not have yet.
+
+    Parameters
+    ----------
+    ws : gspread.Worksheet
+        Worksheet to append to.
+    row : dict
+        Column name to cell value; None is written as an empty cell.
+    """
+    headers = ws.row_values(1)
+    if not headers:
+        headers = list(row.keys())
+        ws.append_row(headers, value_input_option="USER_ENTERED")
+    else:
+        new = [k for k in row if k not in headers]
+        if new:
+            headers = headers + new
+            ws.update(values=[headers], range_name="1:1")
+
+    values = ["" if row.get(h) is None else row.get(h, "") for h in headers]
+    ws.append_row(values, value_input_option="USER_ENTERED")
 
 
 def _to_frame(records: list[dict]) -> pd.DataFrame:
@@ -73,11 +118,16 @@ class SheetLogger:
         )
         self.sheet_id = st.secrets["google_sheets"]["sheet_id"]
         self.last_error: str | None = None  # set when the most recent load() failed
+        self.calc_error: str | None = None  # set when the most recent load_calc_values() failed
         spreadsheet = gspread.authorize(creds).open_by_key(self.sheet_id)
         try:
             self.ws = spreadsheet.worksheet(WORKSHEET)
         except gspread.WorksheetNotFound:
             self.ws = spreadsheet.add_worksheet(title=WORKSHEET, rows=2000, cols=50)
+        try:
+            self.calc_ws = spreadsheet.worksheet(CALC_WORKSHEET)
+        except gspread.WorksheetNotFound:
+            self.calc_ws = spreadsheet.add_worksheet(title=CALC_WORKSHEET, rows=1000, cols=40)
 
     @property
     def url(self) -> str:
@@ -94,11 +144,24 @@ class SheetLogger:
         frame and records the reason in self.last_error for the UI to show once.
         """
         try:
-            records = _fetch_records(self.ws)
+            records = _fetch_records(self.ws, WORKSHEET)
         except Exception as e:
             self.last_error = str(e)
             return pd.DataFrame()
         self.last_error = None
+        return _to_frame(records) if records else pd.DataFrame()
+
+    def load_calc_values(self) -> pd.DataFrame:
+        """
+        All logged calculator values as a DataFrame (cached). On failure returns
+        an empty frame and records the reason in self.calc_error.
+        """
+        try:
+            records = _fetch_records(self.calc_ws, CALC_WORKSHEET)
+        except Exception as e:
+            self.calc_error = str(e)
+            return pd.DataFrame()
+        self.calc_error = None
         return _to_frame(records) if records else pd.DataFrame()
 
     def row_count(self) -> int:
@@ -116,21 +179,15 @@ class SheetLogger:
 
     def append(self, row: dict) -> None:
         """
-        Append a row dict to the sheet, extending the header row if the dict
-        contains new keys (e.g. an equipment group activated for the first time).
+        Append a row dict to the 'Log' worksheet, extending the header row if the
+        dict contains new keys (e.g. an equipment group activated for the first time).
         """
-        headers = self.ws.row_values(1)
-        if not headers:
-            headers = list(row.keys())
-            self.ws.append_row(headers, value_input_option="USER_ENTERED")
-        else:
-            new = [k for k in row if k not in headers]
-            if new:
-                headers = headers + new
-                self.ws.update(values=[headers], range_name="1:1")
+        _append_row(self.ws, row)
+        self.refresh()
 
-        values = ["" if row.get(h) is None else row.get(h, "") for h in headers]
-        self.ws.append_row(values, value_input_option="USER_ENTERED")
+    def append_calc_value(self, row: dict) -> None:
+        """Append a row dict to the 'Calc Values' worksheet, extending its header as needed."""
+        _append_row(self.calc_ws, row)
         self.refresh()
 
 

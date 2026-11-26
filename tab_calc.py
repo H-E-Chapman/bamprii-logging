@@ -2,10 +2,15 @@
 tab_calc.py — Calculators tab: energy and powder, imaging, beamtime planning.
 
 Defaults for the powder delivery inputs come from `powder_calibration` in
-config.yaml. Everything else is entered in the tab.
+config.yaml. Everything else is entered in the tab. Energy & Powder values can
+be logged with a Good / Marginal / Bad rating to the 'Calc Values' worksheet;
+logged values are drawn on the melt-energy-ratio chart.
 """
 
+import html
 import math
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -14,12 +19,28 @@ import streamlit as st
 from plotly.subplots import make_subplots
 from scipy.ndimage import uniform_filter1d
 
+from sheets import SheetLogger
 
-def render_calc_tab(config: dict) -> None:
+
+def render_calc_tab(config: dict, logger: SheetLogger, timezone: str | None) -> None:
+    """
+    Render the Calculators tab.
+
+    Parameters
+    ----------
+    config : dict
+        Parsed config.yaml.
+    logger : SheetLogger
+        Sheet connection used to store and read logged calculator values.
+    timezone : str or None
+        IANA timezone for logged timestamps; server time when None.
+    """
     st.title("Calculators")
 
     with st.expander("⚡ Energy & Powder", expanded=False):
-        _render_energy_powder(config.get("powder_calibration", {}), config.get("materials", []))
+        _render_energy_powder(
+            config.get("powder_calibration", {}), config.get("materials", []), logger, timezone,
+        )
     with st.expander("📷 Imaging: motion blur & frame budget", expanded=False):
         _render_imaging()
     with st.expander("⏱️ Beamtime Planner", expanded=False):
@@ -65,7 +86,7 @@ def _apply_material(materials: list) -> None:
             st.session_state[widget] = float(chosen[key])
 
 
-def _render_energy_powder(cal: dict, materials: list) -> None:
+def _render_energy_powder(cal: dict, materials: list, logger: SheetLogger, timezone: str | None) -> None:
     """
     Laser energy densities, powder delivery and a melt-energy check for one set
     of process parameters.
@@ -80,6 +101,17 @@ def _render_energy_powder(cal: dict, materials: list) -> None:
         energy per caught mass    = P / (mass rate × catchment)         (J/g)
         energy to melt powder     = cp × (T_melt − T_0) + L_f           (J/g)
         melt energy ratio         = absorptivity × energy per caught mass / energy to melt
+
+    Parameters
+    ----------
+    cal : dict
+        `powder_calibration` section of config.yaml.
+    materials : list of dict
+        `materials` section of config.yaml.
+    logger : SheetLogger
+        Sheet connection for logging values and reading previously logged ones.
+    timezone : str or None
+        IANA timezone for logged timestamps.
     """
     col_laser, col_powder, col_mat = st.columns(3)
 
@@ -161,14 +193,21 @@ def _render_energy_powder(cal: dict, materials: list) -> None:
         st.metric("Melt energy ratio", "—" if melt_ratio is None else f"{melt_ratio:,.1f} ×",
                   help="Absorbed energy per gram ÷ energy to heat and melt one gram.")
 
+    material = st.session_state["ep_material"]
     if melt_ratio is not None and ratio_all_powder:
-        st.plotly_chart(_melt_ratio_figure(melt_ratio, ratio_all_powder, catchment), width="stretch")
+        history = logger.load_calc_values()
+        st.plotly_chart(
+            _melt_ratio_figure(melt_ratio, ratio_all_powder, catchment, history, material), width="stretch",
+        )
         st.caption(
             "Zones follow published directed-energy-deposition and powder-bed studies: lack of fusion below about 2× "
             "(the Ti-6Al-4V DED threshold sits at 2–3×), workable builds at roughly 3–8×, excess energy above that. "
             "Published figures count all fed powder, so compare them with the circle; the diamond is the ratio for the "
-            "powder actually caught."
+            "powder actually caught. Small dots are previously logged values at their own catchment efficiency: "
+            "coloured by outcome for the selected material, grey for other materials."
         )
+        if logger.calc_error:
+            st.warning(f"Could not read logged values: {logger.calc_error}")
     if melt_ratio is not None:
         if melt_ratio < 1:
             st.warning(
@@ -182,6 +221,94 @@ def _render_energy_powder(cal: dict, materials: list) -> None:
             )
     st.caption("Material properties are approximate handbook values from config.yaml; absorptivity in particular varies with surface state and should be treated as a guide.")
 
+    record = {
+        "Material": material,
+        "Laser power (W)": power,
+        "Scan speed (mm/s)": speed,
+        "Spot diameter (mm)": spot,
+        "Initial temperature (°C)": t0,
+        "Feeder speed (rpm)": rpm,
+        "Calibration factor (mm³/s per rpm)": factor,
+        "Catchment efficiency (%)": catchment * 100,
+        "Density (kg/m³)": props["density_kg_m3"],
+        "Specific heat capacity (J/kg·K)": props["specific_heat_J_kgK"],
+        "Latent heat of fusion (J/kg)": props["latent_heat_J_kg"],
+        "Melting point (°C)": props["melting_point_C"],
+        "Laser absorptivity": props["absorptivity"],
+        "Volumetric rate (mm³/s)": volume_rate,
+        "Mass rate (g/min)": mass_rate_g_min,
+        "Powder deposited per unit length (mg/mm)": _ratio(caught_g_s * 1000, speed),
+        "Linear energy density (J/mm)": _ratio(power, speed),
+        "Areal energy density (J/mm²)": _ratio(power, speed * spot),
+        "Power density (W/mm²)": _ratio(power, math.pi * spot**2 / 4),
+        "Interaction time (ms)": None if t_int is None else t_int * 1000,
+        "Energy per unit powder mass (J/g)": energy_per_g,
+        "Energy to heat and melt the powder (J/g)": to_melt,
+        "Absorbed energy per unit powder mass (J/g)": absorbed,
+        "Melt energy ratio": melt_ratio,
+        "Melt energy ratio (all powder)": ratio_all_powder,
+    }
+    _render_value_logger(logger, timezone, record)
+
+
+def _log_values(logger: SheetLogger, timezone: str | None, record: dict) -> None:
+    """
+    Button callback: append the calculator values with the chosen rating and note
+    to the 'Calc Values' worksheet and leave a status message in session state.
+
+    Parameters
+    ----------
+    logger : SheetLogger
+        Sheet connection.
+    timezone : str or None
+        IANA timezone for the timestamp; server time when None.
+    record : dict
+        Calculator inputs and outputs, keyed by column name.
+    """
+    rating = st.session_state.get("ep_rating")
+    now = datetime.now(ZoneInfo(timezone)) if timezone else datetime.now()
+    row = {
+        "Timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "Rating": rating,
+        "Note": (st.session_state.get("ep_note") or "").strip(),
+        **record,
+    }
+    try:
+        logger.append_calc_value(row)
+    except Exception as e:
+        st.session_state["ep_log_msg"] = ("error", f"Could not log values: {e}")
+        return
+    st.session_state["ep_note"] = ""
+    st.session_state["ep_log_msg"] = ("success", f"✅ Logged as {rating} at {row['Timestamp']}")
+
+
+def _render_value_logger(logger: SheetLogger, timezone: str | None, record: dict) -> None:
+    """
+    Rating, note and log button for the current Energy & Powder values.
+
+    Parameters
+    ----------
+    logger : SheetLogger
+        Sheet connection.
+    timezone : str or None
+        IANA timezone for the timestamp.
+    record : dict
+        Calculator inputs and outputs for the current values, keyed by column name.
+    """
+    st.markdown("---")
+    st.markdown("**Log these values**")
+    col_rating, col_note, col_button = st.columns([2, 3, 1], vertical_alignment="bottom")
+    with col_rating:
+        rating = st.radio("Outcome", list(_RATING_COLOURS), index=None, horizontal=True, key="ep_rating")
+    with col_note:
+        st.text_input("Note (optional)", key="ep_note", placeholder="e.g. porous at track start, good bead shape")
+    with col_button:
+        st.button("Log values", key="ep_log", on_click=_log_values, args=(logger, timezone, record),
+                  disabled=rating is None, width="stretch")
+    message = st.session_state.pop("ep_log_msg", None)
+    if message:
+        (st.success if message[0] == "success" else st.error)(message[1])
+
 
 # (low, high, colour, label) on the melt-energy-ratio axis; colours are the status palette with transparency
 _MELT_ZONES = [
@@ -193,13 +320,89 @@ _MELT_ZONES = [
 ]
 
 
-def _melt_ratio_figure(ratio: float, ratio_all_powder: float, catchment: float) -> go.Figure:
+_RATING_COLOURS = {"Good": "#0ca30c", "Marginal": "#fab219", "Bad": "#d03b3b"}
+_OTHER_MATERIAL_COLOUR = "rgba(137,135,129,0.65)"
+_HISTORY_Y = (0.06, 0.13, 0.20)   # logged points cycle through these heights so close values stay visible
+
+
+def _add_logged_values(fig: go.Figure, history: pd.DataFrame, material: str, clamp) -> None:
+    """
+    Add previously logged values to the melt-ratio chart, one trace per outcome
+    for the selected material (coloured) and one for all other materials (grey).
+
+    Parameters
+    ----------
+    fig : go.Figure
+        Figure to add the traces to.
+    history : pd.DataFrame
+        Rows of the 'Calc Values' worksheet; may be empty.
+    material : str
+        Currently selected material.
+    clamp : callable
+        Maps a ratio onto the visible axis range.
+    """
+    if history.empty or not {"Melt energy ratio", "Material", "Rating"} <= set(history.columns):
+        return
+    df = history.copy()
+    df["_ratio"] = pd.to_numeric(df["Melt energy ratio"], errors="coerce")
+    df = df[df["_ratio"] > 0].reset_index(drop=True)
+    if df.empty:
+        return
+    df["_y"] = [_HISTORY_Y[i % len(_HISTORY_Y)] for i in range(len(df))]
+
+    def hover(row: pd.Series) -> str:
+        parts = [f"<b>{html.escape(str(row['Material']))}: {row['Rating']}</b>", f"{row['_ratio']:.1f}×"]
+        for col, unit in (("Laser power (W)", "W"), ("Scan speed (mm/s)", "mm/s"), ("Feeder speed (rpm)", "rpm"),
+                          ("Catchment efficiency (%)", "% catchment")):
+            if col in row and str(row[col]).strip() != "":
+                parts.append(f"{row[col]} {unit}")
+        line = f"{parts[1]} · " + ", ".join(parts[2:]) if len(parts) > 2 else parts[1]
+        out = [parts[0], line]
+        if str(row.get("Timestamp", "")).strip():
+            out.append(str(row["Timestamp"]))
+        if str(row.get("Note", "")).strip():
+            out.append(html.escape(str(row["Note"])))
+        return "<br>".join(out)
+
+    same = df["Material"] == material
+    groups = [(f"{name} ({material})", colour, df[same & (df["Rating"] == name)]) for name, colour in _RATING_COLOURS.items()]
+    groups.append(("Other materials", _OTHER_MATERIAL_COLOUR, df[~same]))
+    for label, colour, sub in groups:
+        if sub.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=sub["_ratio"].map(clamp), y=sub["_y"], mode="markers", name=label,
+            marker=dict(size=9, color=colour, line=dict(width=1, color="white")),
+            text=[hover(r) for _, r in sub.iterrows()], hovertemplate="%{text}<extra></extra>",
+        ))
+
+
+def _melt_ratio_figure(
+    ratio: float, ratio_all_powder: float, catchment: float, history: pd.DataFrame, material: str,
+) -> go.Figure:
     """
     Horizontal band chart: melt energy ratio on a log axis with the literature
     zones. Markers show the ratio with all fed powder counted (as published
     studies define it) and at the entered catchment efficiency; bars behind the
     diamond span the measured catchment range of BAMPR-II, 40–60% typical and
-    25–75% worst case.
+    25–75% worst case. Previously logged values sit below as small dots.
+
+    Parameters
+    ----------
+    ratio : float
+        Melt energy ratio at the entered catchment efficiency.
+    ratio_all_powder : float
+        Melt energy ratio with all fed powder counted.
+    catchment : float
+        Catchment efficiency as a fraction.
+    history : pd.DataFrame
+        Logged calculator values; may be empty.
+    material : str
+        Currently selected material.
+
+    Returns
+    -------
+    go.Figure
     """
     x_min, x_max = 0.3, 40.0
     at = lambda eta: ratio_all_powder / eta            # ratio at a given catchment efficiency
@@ -223,11 +426,12 @@ def _melt_ratio_figure(ratio: float, ratio_all_powder: float, catchment: float) 
         textposition=["bottom center", "top center"], textfont=dict(size=11),
         hovertemplate="%{text}<extra></extra>", showlegend=False,
     ))
-    fig.update_layout(legend=dict(orientation="h", y=-0.55, x=0, font=dict(size=11)))
+    _add_logged_values(fig, history, material, clamp)
+    fig.update_layout(legend=dict(orientation="h", y=-0.6, x=0, font=dict(size=11)))
     fig.update_xaxes(type="log", range=[math.log10(x_min), math.log10(x_max)], title_text="melt energy ratio (absorbed energy ÷ energy to heat and melt the powder)",
                      tickvals=[0.3, 0.5, 1, 2, 3, 5, 8, 12, 20, 40], ticktext=["0.3", "0.5", "1", "2", "3", "5", "8", "12", "20", "40"], showgrid=False)
     fig.update_yaxes(visible=False, range=[-0.35, 1.45])
-    fig.update_layout(height=260, margin=dict(l=20, r=20, t=30, b=70), template="plotly_white",
+    fig.update_layout(height=300, margin=dict(l=20, r=20, t=30, b=100), template="plotly_white",
                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     return fig
 
