@@ -103,4 +103,4 @@ with tab_plot:
 with tab_doe:
     render_doe_tab()
 with tab_calc:
-    render_calc_tab(config)
+    render_calc_tab(config, logger, timezone)
